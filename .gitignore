@@ -1,0 +1,43 @@
+# JSON files
+*.json
+
+# Excel files
+*.xlsx
+
+# Environment files
+*.env
+
+# CSV files
+*.csv
+
+# Log files
+*.log
+
+# Python compiled files
+*.pyc
+
+# Python cache directories
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+env/
+.venv/
+.env/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

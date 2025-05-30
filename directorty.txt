@@ -1,0 +1,80 @@
+ Advanced Crawling 프로젝트 디렉토리 구조
+
+```
+advanced_crawling/
+├── 📄 url_extractor.py                네이버 검색 기반 홈페이지 URL 추출기 (24KB)
+├── 📄 parser.py                       웹페이지 파싱 및 연락처 정보 추출기 (14KB)  
+├── 📄 naver_map_crawler.py            네이버 지도 데이터 크롤링 엔진 (22KB)
+├── 📄 fax_crawler.py                  팩스번호 전문 추출 크롤러 (34KB)
+├── 📄 enhanced_detail_extractor.py    고급 상세정보 추출기 (41KB)
+├── 📄 detailextractor.py              기본 상세정보 추출기 (22KB)
+├── 📄 validator.py                    데이터 유효성 검증기 (12KB)
+├── 📄 data_statistics.py              크롤링 데이터 통계 분석기 (33KB)
+├── 📄 ai_helpers.py                   AI 기반 데이터 처리 도우미 (22KB)
+├── 📄 jsontoexcel.py                  JSON → Excel 변환기 (22KB)
+├── 📄 jsontocsv.py                    JSON → CSV 변환기 (7KB)
+├── 📄 app.py                          FastAPI 기반 웹 애플리케이션 메인 (18KB)
+├── 📁 templates/                      웹 인터페이스 템플릿
+│   ├── html/
+│   │   └── index.html                메인 웹 인터페이스 (10KB)
+│   ├── css/
+│   │   └── style.css                 스타일시트 (13KB)
+│   └── js/
+│       └── main.js                   JavaScript 메인 스크립트 (22KB)
+├── 📄 requirements.txt                Python 패키지 의존성 목록
+├── 📄 .gitignore                      Git 제외 파일 설정
+└── 📄 directorty.txt                  프로젝트 구조 문서 (이 파일)
+```
+
+ 🚀 각 모듈별 주요 기능
+
+ 🔧 핵심 크롤링 엔진
+- url_extractor.py: Selenium을 사용한 네이버 검색 기반 홈페이지 URL 자동 발견
+- parser.py: BeautifulSoup을 사용한 웹페이지 HTML 파싱 및 연락처 정보 추출
+- naver_map_crawler.py: 네이버 지도 API 활용 위치 기반 데이터 수집
+- fax_crawler.py: 정규표현식 기반 팩스번호 전문 추출 및 검증 시스템
+- enhanced_detail_extractor.py: AI 기반 고급 상세정보 추출 (최대 용량 41KB)
+
+ 📊 데이터 분석 및 검증
+- validator.py: 수집된 데이터의 무결성 및 품질 검증
+- data_statistics.py: 크롤링 성과 분석 및 통계 생성 (최대 용량 33KB)
+- detailextractor.py: 기본 상세정보 추출 및 처리
+- ai_helpers.py: 머신러닝 기반 데이터 분류 및 정제
+
+ 🔄 데이터 변환 유틸리티
+- jsontoexcel.py: JSON 형태 크롤링 결과를 Excel 파일로 변환
+- jsontocsv.py: 대용량 데이터 CSV 변환 및 처리
+
+ 🌐 웹 사용자 인터페이스
+- web_crawler_app.py: FastAPI 기반 실시간 크롤링 제어 웹 애플리케이션
+- templates/html/index.html: 반응형 메인 웹 인터페이스
+- templates/css/style.css: 모던 UI 스타일시트
+- templates/js/main.js: 동적 웹 기능 JavaScript
+
+ 💻 기술 스택
+- 웹 크롤링: Selenium, BeautifulSoup4, Requests
+- 웹 프레임워크: FastAPI, Uvicorn, Jinja2
+- 데이터 처리: Pandas, OpenPyXL
+- AI/ML: Pydantic을 활용한 데이터 검증
+- 프론트엔드: HTML5, CSS3, JavaScript
+
+ 🎯 주요 워크플로우
+1. URL 추출: `url_extractor.py` → 네이버 검색을 통한 홈페이지 URL 발견
+2. 페이지 파싱: `parser.py` → 웹페이지 내용 및 연락처 정보 추출
+3. 데이터 검증: `validator.py` → 추출된 데이터의 품질 검증
+4. 통계 분석: `data_statistics.py` → 크롤링 성과 분석
+5. 결과 변환: `jsontoexcel.py`, `jsontocsv.py` → 다양한 형식으로 출력
+6. 웹 인터페이스: `web_crawler_app.py` → 실시간 모니터링 및 제어
+
+ 📋 현재 구현 현황
+- ✅ 총 12개 핵심 모듈 완전 구현
+- ✅ 웹 인터페이스 완성 (HTML, CSS, JS)
+- ✅ 의존성 관리 설정 완료
+- ✅ Git 설정 완료
+
+ 🔥 프로젝트 특징
+- 대용량 파일: `enhanced_detail_extractor.py` (41KB), `data_statistics.py` (33KB)
+- 모듈화 설계: 각 기능별 독립적 실행 가능
+- 실시간 웹 제어: FastAPI 기반 실시간 모니터링
+- 다양한 출력 형식: Excel, CSV 지원
+- 확장 가능 구조: 새로운 크롤링 타겟 쉽게 추가 가능 
