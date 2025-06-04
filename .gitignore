@@ -1,0 +1,53 @@
+# .gitignore 파일을 수정하여 상위 디렉토리 무시 규칙을 맨 앞에 추가
+cat > .gitignore << 'EOF'
+# 🚨 중요: 상위 디렉토리 모든 파일 무시
+../../*
+
+# 단, 현재 프로젝트는 추적 허용
+!../../pjt/
+!../../pjt/advanced_crawling/
+
+# JSON files
+*.json
+
+# Excel files
+*.xlsx
+
+# Environment files
+*.env
+
+# CSV files
+*.csv
+
+# Log files
+*.log
+
+# Python compiled files
+*.pyc
+
+# Python cache directories
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+env/
+.venv/
+.env/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+EOF
