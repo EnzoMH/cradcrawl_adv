@@ -12,6 +12,8 @@ import logging
 import traceback
 from typing import Dict, Any, Optional, Union, List
 import google.generativeai as genai
+from constants import AI_MODEL_CONFIG  # AI_MODEL_CONFIG만 import
+from utils.logger_utils import LoggerUtils
 
 import ssl
 import urllib3
@@ -21,7 +23,7 @@ from urllib3.util.retry import Retry
 # 로거 설정
 logger = logging.getLogger(__name__)
 
-# Gemini API 관련 상수
+# Gemini API 관련 상수 (환경변수에서 직접 가져오기)
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     logger.warning("GEMINI_API_KEY 환경 변수가 설정되지 않았습니다. AI 기능을 사용할 수 없습니다.")
@@ -48,12 +50,7 @@ class AIModelManager:
         try:
             # Gemini 설정
             genai.configure(api_key=GEMINI_API_KEY)
-            self.gemini_config = {
-                'temperature': 0.9,
-                'top_p': 1,
-                'top_k': 1,
-                'max_output_tokens': 3000,
-            }
+            self.gemini_config = AI_MODEL_CONFIG
             self.gemini_model = genai.GenerativeModel(
                 GEMINI_MODEL_TEXT,
                 generation_config=self.gemini_config
@@ -237,42 +234,22 @@ async def _init_gemini_model():
     
     # 이미 초기화되었으면 건너뜀
     if gemini_model is not None:
-        return gemini_model
+        return
     
     try:
-        # AI 모델 관리자에서 모델 가져오기 시도
-        if ai_model_manager and ai_model_manager.gemini_model:
-            gemini_model = ai_model_manager.gemini_model
-            logger.info("AI 모델 관리자에서 Gemini 모델 로드 성공")
-            return gemini_model
-        
-        # Google Generative AI 라이브러리 임포트 시도
-        try:
-            import google.generativeai as genai
-            logger.info("Google Generative AI 라이브러리 로드 성공")
-        except ImportError as e:
-            logger.error(f"Google Generative AI 라이브러리 임포트 실패: {str(e)}")
-            return None
-        
-        # API 키 확인
-        if not GEMINI_API_KEY:
-            logger.error("Gemini API 키가 설정되지 않았습니다.")
-            return None
-            
-        # Gemini 설정
+        # Gemini API 키 설정
         genai.configure(api_key=GEMINI_API_KEY)
         
-        # 텍스트 모델 로드
-        model = genai.GenerativeModel(GEMINI_MODEL_TEXT)
-        gemini_model = model
+        # Gemini 모델 초기화 (centralized config 사용)
+        gemini_model = genai.GenerativeModel(
+            GEMINI_MODEL_TEXT,
+            generation_config=AI_MODEL_CONFIG
+        )
         
-        logger.info(f"Gemini 모델 초기화 성공: {GEMINI_MODEL_TEXT}")
-        return model
-        
+        logger.info("독립 Gemini 모델 초기화 성공")
     except Exception as e:
-        logger.error(f"Gemini 모델 초기화 실패: {str(e)}")
+        logger.error(f"독립 Gemini 모델 초기화 실패: {e}")
         logger.debug(traceback.format_exc())
-        return None
 
 async def extract_with_gemini_text(text_content: str, prompt_template: str) -> str:
     """

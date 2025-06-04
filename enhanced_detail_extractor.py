@@ -184,17 +184,37 @@ class EnhancedDetailExtractor:
 
     # 🔧 개선: 토큰 수 계산 및 제한 함수
     def estimate_token_count(self, text: str) -> int:
-        """텍스트의 대략적인 토큰 수 추정"""
-        # 한글/한자: 1글자 ≈ 1.5토큰, 영문: 1단어 ≈ 1토큰, 특수문자 고려
-        korean_chars = len(re.findall(r'[가-힣]', text))
-        english_words = len(re.findall(r'[a-zA-Z]+', text))
-        other_chars = len(text) - korean_chars - sum(len(word) for word in re.findall(r'[a-zA-Z]+', text))
+        """🔧 개선된 토큰 수 추정 (보수적 계산)"""
+        if not text:
+            return 0
         
-        estimated_tokens = int(korean_chars * 1.5 + english_words + other_chars * 0.5)
-        return estimated_tokens
+        try:
+            # 더 보수적이고 정확한 토큰 계산
+            korean_chars = len(re.findall(r'[가-힣]', text))
+            chinese_chars = len(re.findall(r'[一-龯]', text))
+            english_words = len(re.findall(r'[a-zA-Z]+', text))
+            numbers = len(re.findall(r'\d+', text))
+            special_chars = len(re.findall(r'[^\w\s가-힣一-龯]', text))
+            
+            # Gemini 기준 보수적 계산
+            estimated_tokens = int(
+                korean_chars * 2.0 +      # 한글: 2토큰 (보수적)
+                chinese_chars * 2.0 +     # 한자: 2토큰
+                english_words * 1.3 +     # 영단어: 1.3토큰 (서브워드 고려)
+                numbers * 1.5 +           # 숫자: 1.5토큰
+                special_chars * 1.2       # 특수문자: 1.2토큰
+            )
+            
+            # 안전 마진 20% 추가
+            return int(estimated_tokens * 1.2)
+            
+        except Exception as e:
+            print(f"⚠️ 토큰 계산 오류: {e}")
+            # 폴백: 매우 보수적 계산
+            return len(text.split()) * 2
 
     def truncate_text_by_tokens(self, text: str, max_tokens: int = None) -> str:
-        """토큰 수 제한에 맞춰 텍스트 자르기"""
+        """🔧 개선된 토큰 기반 텍스트 절단"""
         if max_tokens is None:
             max_tokens = self.max_input_tokens
         
@@ -203,21 +223,66 @@ class EnhancedDetailExtractor:
         if current_tokens <= max_tokens:
             return text
         
-        # 토큰 수가 초과하면 비율로 자르기
-        ratio = max_tokens / current_tokens * 0.9  # 안전 마진 10%
+        try:
+            # 🆕 연락처 우선 보존 절단
+            return self._priority_aware_truncate(text, max_tokens, current_tokens)
+            
+        except Exception as e:
+            print(f"⚠️ 우선순위 절단 실패, 기본 절단 사용: {e}")
+            # 폴백: 기본 비율 절단
+            ratio = (max_tokens * 0.9) / current_tokens
+            target_length = int(len(text) * ratio)
+            return text[:target_length]
+
+    def _priority_aware_truncate(self, text, max_tokens, current_tokens):
+        """🆕 우선순위 고려 절단"""
+        # 연락처 패턴 위치 파악
+        contact_patterns = [
+            (r'(전화|tel|phone)[:\s]*\d{2,3}[-\s]*\d{3,4}[-\s]*\d{4}', 3),  # 전화번호 (우선순위 3)
+            (r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', 2),        # 이메일 (우선순위 2)
+            (r'\d{5}.*?(시|구|군)', 1),                                      # 주소 (우선순위 1)
+        ]
+        
+        priority_sections = []
+        
+        for pattern, priority in contact_patterns:
+            for match in re.finditer(pattern, text, re.I):
+                start = max(0, match.start() - 100)
+                end = min(len(text), match.end() + 100)
+                section = text[start:end]
+                priority_sections.append((section, priority, start, end))
+        
+        if priority_sections:
+            # 우선순위별 정렬
+            priority_sections.sort(key=lambda x: -x[1])
+            
+            # 높은 우선순위 섹션들부터 포함
+            selected_text = ""
+            included_ranges = []
+            
+            for section, priority, start, end in priority_sections:
+                # 겹치지 않는 섹션만 추가
+                if not any(start < e and end > s for s, e in included_ranges):
+                    test_text = selected_text + "\n" + section
+                    if self.estimate_token_count(test_text) <= max_tokens * 0.8:
+                        selected_text = test_text
+                        included_ranges.append((start, end))
+                    else:
+                        break
+            
+            if selected_text:
+                self.stats['token_limit_exceeded'] += 1
+                print(f"🎯 우선순위 기반 절단: {current_tokens} → {self.estimate_token_count(selected_text)} 토큰")
+                return selected_text.strip()
+        
+        # 우선순위 섹션이 없으면 기본 절단
+        ratio = (max_tokens * 0.9) / current_tokens
         target_length = int(len(text) * ratio)
         
-        # 앞부분 70%, 뒷부분 30%로 나누어 중요 정보 보존
-        front_length = int(target_length * 0.7)
-        back_length = target_length - front_length
-        
-        if back_length > 0:
-            truncated = text[:front_length] + "\n... (중간 생략) ...\n" + text[-back_length:]
-        else:
-            truncated = text[:target_length]
+        truncated = self._sentence_aware_truncate(text, target_length)
         
         self.stats['token_limit_exceeded'] += 1
-        print(f"⚠️ 토큰 제한으로 텍스트 축소: {current_tokens} → {self.estimate_token_count(truncated)} 토큰")
+        print(f"⚠️ 기본 절단: {current_tokens} → {self.estimate_token_count(truncated)} 토큰")
         
         return truncated
 
@@ -1099,66 +1164,277 @@ class EnhancedDetailExtractor:
             return {}
         
     def create_structured_prompt(self, text_chunk, organization_name):
-        """구조화된 프롬프트 생성"""
-        prompt = f"""다음 정보를 정리해주세요.
+        """🔧 개선된 구조화 프롬프트 생성"""
+        # 🆕 스마트 텍스트 절단 (프롬프트용)
+        processed_chunk = self._smart_truncate_for_prompt(text_chunk, 2500)
+        
+        prompt = f"""'{organization_name}' 기관의 연락처 정보를 정확하게 추출해주세요.
 
-            기관명: {organization_name}
+                **기관명:** {organization_name}
 
-            아래 텍스트에서 정확한 연락처 정보만 추출하여 다음 형식으로 답변해주세요:
+                **추출 대상:**
+                - 전화번호: 한국 형식 (02-1234-5678, 031-123-4567, 010-1234-5678)
+                - 팩스번호: 한국 형식 (02-1234-5679)  
+                - 이메일: 유효한 형식 (info@example.com)
+                - 우편번호: 5자리 숫자 (12345)
+                - 주소: 완전한 주소 (시/도부터 상세주소까지)
 
-            전화번호: 
-            팩스번호: 
-            이메일: 
-            우편번호: 
-            주소: 
+                **응답 형식:** (정확히 지켜주세요)
+                전화번호: [발견된 번호 또는 "없음"]
+                팩스번호: [발견된 번호 또는 "없음"]
+                이메일: [발견된 이메일 또는 "없음"]
+                우편번호: [발견된 우편번호 또는 "없음"]
+                주소: [발견된 주소 또는 "없음"]
 
-            **추출 규칙:**
-            - 전화번호: 한국 형식만 (예: 02-1234-5678, 031-123-4567)
-            - 팩스번호: 한국 형식만 (예: 02-1234-5679)
-            - 이메일: 유효한 이메일 형식만 (예: info@example.com)
-            - 우편번호: 5자리 숫자 (예: 12345)
-            - 주소: 시/도부터 시작하는 완전한 주소
-            - 정보가 없으면 "정보확인 안됨"으로 표시
-            - 각 항목당 최대 1개만 추출
+                **중요 규칙:**
+                1. {organization_name}와 직접 관련된 연락처만 추출
+                2. 대표번호, 메인 연락처 우선
+                3. 여러 개 발견시 가장 공식적인 것 선택
+                4. 확실하지 않으면 "없음"으로 표시
 
-            **분석할 텍스트:**
-            {text_chunk[:2000]}
+                **분석할 텍스트:**
+                {processed_chunk}
 
-            위 형식을 정확히 지켜서 답변해주세요."""
+                위 형식으로 정확하게 답변해주세요."""
 
         # 프롬프트 로깅
-        self.ai_logger.info(f"=== 프롬프트 생성 [{organization_name}] ===")
-        self.ai_logger.info(f"프롬프트 내용:\n{prompt[:500]}...")
-        self.ai_logger.info(f"텍스트 청크 길이: {len(text_chunk)} 문자")
+        self.ai_logger.info(f"=== 개선된 프롬프트 생성 [{organization_name}] ===")
+        self.ai_logger.info(f"원본 청크 길이: {len(text_chunk)} → 처리된 길이: {len(processed_chunk)}")
+        self.ai_logger.info(f"프롬프트 총 길이: {len(prompt)} 문자")
         
         return prompt
+
+    def _smart_truncate_for_prompt(self, text, max_length):
+        """🆕 프롬프트용 스마트 텍스트 절단"""
+        if len(text) <= max_length:
+            return text
+        
+        try:
+            # 1순위: 연락처 패턴 주변 우선 추출
+            contact_patterns = [
+                r'(전화|tel|phone)[:\s]*\d{2,3}[-\s]*\d{3,4}[-\s]*\d{4}',
+                r'(팩스|fax)[:\s]*\d{2,3}[-\s]*\d{3,4}[-\s]*\d{4}',
+                r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
+                r'\d{5}.*?(시|구|군)',
+            ]
+            
+            important_sections = []
+            
+            for pattern in contact_patterns:
+                for match in re.finditer(pattern, text, re.I):
+                    start = max(0, match.start() - 200)
+                    end = min(len(text), match.end() + 200)
+                    section = text[start:end]
+                    important_sections.append(section)
+            
+            if important_sections:
+                # 중요 섹션들을 합쳐서 max_length 내에서 반환
+                combined = '\n--- 연락처 관련 섹션 ---\n'.join(important_sections)
+                if len(combined) <= max_length:
+                    return combined
+                else:
+                    return combined[:max_length]
+            
+            # 2순위: 문장 단위 절단
+            return self._sentence_aware_truncate(text, max_length)
+            
+        except Exception:
+            return text[:max_length]
     
     def parse_markdown_to_dict(self, markdown_text):
-        """마크다운 응답을 딕셔너리로 변환"""
-        result = {}
-        lines = markdown_text.split('\n')
+        """🔧 강화된 AI 응답 파싱 (정규식 병행)"""
+        result = {
+            'phone': [],
+            'fax': [],
+            'email': [],
+            'address': [],
+            'postal_code': []
+        }
         
-        for line in lines:
-            line = line.strip()
-            if ':' in line and not line.startswith('#'):
-                key, value = line.split(':', 1)
-                key = key.strip().replace('**', '').replace('*', '')
+        try:
+            # 1단계: 기존 마크다운 파싱
+            lines = markdown_text.split('\n')
+            
+            for line in lines:
+                line = line.strip()
+                if ':' in line and not line.startswith('#'):
+                    try:
+                        key, value = line.split(':', 1)
+                        key = key.strip().replace('**', '').replace('*', '').lower()
+                        value = value.strip()
+                        
+                        if value and value not in ["정보확인 안됨", "없음", "none", "-", "n/a"]:
+                            # 키 매핑 개선
+                            if any(keyword in key for keyword in ['전화번호', 'phone', 'tel']):
+                                if self._is_valid_phone_format(value):
+                                    result['phone'].append(value)
+                            elif any(keyword in key for keyword in ['팩스', 'fax']):
+                                if self._is_valid_phone_format(value):
+                                    result['fax'].append(value)
+                            elif any(keyword in key for keyword in ['이메일', 'email', 'mail']):
+                                if self._is_valid_email_format(value):
+                                    result['email'].append(value)
+                            elif any(keyword in key for keyword in ['주소', 'address', 'addr']):
+                                if len(value) > 10:  # 의미있는 길이의 주소만
+                                    result['address'].append(value)
+                            elif any(keyword in key for keyword in ['우편번호', 'postal', 'zip']):
+                                if re.match(r'^\d{5}$', value):
+                                    result['postal_code'].append(value)
+                    except ValueError:
+                        continue
+            
+            # 2단계: 정규식으로 직접 추출 (AI 파싱 보완)
+            regex_results = self._extract_with_regex_patterns(markdown_text)
+            
+            # 3단계: 결과 병합 (중복 제거)
+            for key, values in regex_results.items():
+                for value in values:
+                    if value not in result[key]:
+                        result[key].append(value)
+            
+            # 4단계: 결과 검증 및 정제
+            result = self._validate_and_clean_parsed_result(result)
+            
+            return result
+            
+        except Exception as e:
+            print(f"⚠️ AI 응답 파싱 오류: {e}")
+            return result
+
+    def _extract_with_regex_patterns(self, text):
+        """🆕 정규식을 통한 직접 추출 (AI 파싱 보완용)"""
+        regex_result = {
+            'phone': [],
+            'fax': [],
+            'email': [],
+            'address': [],
+            'postal_code': []
+        }
+        
+        try:
+            # 전화번호 패턴 (더 정교함)
+            phone_patterns = [
+                r'(\d{2,3}[-\s]*\d{3,4}[-\s]*\d{4})',  # 기본 패턴
+                r'(전화|tel|phone)[:\s]*(\d{2,3}[-\s]*\d{3,4}[-\s]*\d{4})',  # 라벨 포함
+            ]
+            
+            for pattern in phone_patterns:
+                matches = re.findall(pattern, text, re.I)
+                for match in matches:
+                    phone = match if isinstance(match, str) else match[-1]
+                    phone = re.sub(r'[^\d-]', '', phone)  # 숫자와 하이픈만
+                    if self._is_valid_phone_format(phone):
+                        regex_result['phone'].append(phone)
+            
+            # 팩스번호 패턴
+            fax_patterns = [
+                r'(팩스|fax)[:\s]*(\d{2,3}[-\s]*\d{3,4}[-\s]*\d{4})',
+            ]
+            
+            for pattern in fax_patterns:
+                matches = re.findall(pattern, text, re.I)
+                for match in matches:
+                    fax = match[-1] if isinstance(match, tuple) else match
+                    fax = re.sub(r'[^\d-]', '', fax)
+                    if self._is_valid_phone_format(fax):
+                        regex_result['fax'].append(fax)
+            
+            # 이메일 패턴
+            email_pattern = r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
+            email_matches = re.findall(email_pattern, text)
+            for email in email_matches:
+                if self._is_valid_email_format(email):
+                    regex_result['email'].append(email)
+            
+            # 우편번호 패턴
+            postal_pattern = r'(\d{5})(?=\s*[가-힣].*?(시|구|군))'
+            postal_matches = re.findall(postal_pattern, text)
+            for postal in postal_matches:
+                regex_result['postal_code'].append(postal)
+            
+            return regex_result
+            
+        except Exception as e:
+            print(f"⚠️ 정규식 추출 오류: {e}")
+            return regex_result
+
+    def _is_valid_phone_format(self, phone):
+        """🆕 전화번호 형식 검증"""
+        if not phone:
+            return False
+        
+        # 숫자만 추출
+        digits = re.sub(r'[^\d]', '', phone)
+        
+        # 길이 체크 (한국 전화번호: 9-11자리)
+        if len(digits) < 9 or len(digits) > 11:
+            return False
+        
+        # 패턴 체크
+        phone_patterns = [
+            r'^\d{2,3}-\d{3,4}-\d{4}$',  # 02-1234-5678
+            r'^\d{3}-\d{4}-\d{4}$',      # 010-1234-5678
+        ]
+        
+        formatted_phone = re.sub(r'(\d{2,3})(\d{3,4})(\d{4})', r'\1-\2-\3', digits)
+        
+        return any(re.match(pattern, formatted_phone) for pattern in phone_patterns)
+
+    def _is_valid_email_format(self, email):
+        """🆕 이메일 형식 검증"""
+        if not email:
+            return False
+        
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        return re.match(email_pattern, email) is not None
+
+    def _validate_and_clean_parsed_result(self, result):
+        """🆕 파싱 결과 검증 및 정제"""
+        cleaned_result = {}
+        
+        for key, values in result.items():
+            cleaned_values = []
+            
+            for value in values:
                 value = value.strip()
                 
-                if value and value != "정보확인 안됨":
-                    # 키 매핑
-                    if '전화번호' in key or 'phone' in key.lower():
-                        result['phone'] = [value]
-                    elif '팩스' in key or 'fax' in key.lower():
-                        result['fax'] = [value]
-                    elif '이메일' in key or 'email' in key.lower():
-                        result['email'] = [value]
-                    elif '주소' in key or 'address' in key.lower():
-                        result['address'] = [value]
-                    elif '우편번호' in key or 'postal' in key.lower():
-                        result['postal_code'] = [value]
+                # 중복 제거
+                if value not in cleaned_values:
+                    if key in ['phone', 'fax']:
+                        # 전화번호 정규화
+                        normalized = self._normalize_phone_number(value)
+                        if normalized:
+                            cleaned_values.append(normalized)
+                    elif key == 'email':
+                        # 이메일 소문자 변환
+                        cleaned_values.append(value.lower())
+                    else:
+                        cleaned_values.append(value)
+            
+            # 최대 2개까지만 유지 (우선순위: 먼저 발견된 것)
+            cleaned_result[key] = cleaned_values[:2]
         
-        return result
+        return cleaned_result
+
+    def _normalize_phone_number(self, phone):
+        """🆕 전화번호 정규화"""
+        if not phone:
+            return None
+        
+        # 숫자만 추출
+        digits = re.sub(r'[^\d]', '', phone)
+        
+        if len(digits) == 10:
+            # 10자리: 02-1234-5678 형태
+            return f"{digits[:2]}-{digits[2:6]}-{digits[6:]}"
+        elif len(digits) == 11:
+            # 11자리: 010-1234-5678 형태
+            return f"{digits[:3]}-{digits[3:7]}-{digits[7:]}"
+        elif len(digits) == 9:
+            # 9자리: 31-123-4567 형태
+            return f"0{digits[:2]}-{digits[2:5]}-{digits[5:]}"
+        
+        return phone  # 정규화 실패시 원본 반환
     
     def merge_contact_data(self, json_data, ai_data):
         """JSON 데이터와 AI 추출 데이터 병합"""
@@ -1220,7 +1496,7 @@ class EnhancedDetailExtractor:
             return {}
     
     def crawl_homepage_if_needed(self, url, organization_name):
-        """✅ 수정: 클래스 내부로 이동, SSL 문제 해결이 포함된 크롤링"""
+        """🔧 개선: 연락처 섹션 우선 추출 및 스마트 텍스트 처리"""
         try:
             print(f"🔍 추가 크롤링 시작: {organization_name} ({url})")
             
@@ -1235,12 +1511,22 @@ class EnhancedDetailExtractor:
             
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            # 불필요한 태그 제거
-            for tag in soup(['script', 'style', 'nav', 'header', 'aside']):
+            # 🆕 1단계: 연락처 관련 섹션 우선 추출
+            priority_text = self._extract_contact_priority_sections(soup, organization_name)
+            
+            # 🆕 2단계: 나머지 콘텐츠에서 불필요한 태그 제거
+            for tag in soup(['script', 'style', 'nav', 'header']):
                 tag.decompose()
             
-            # 전체 텍스트 추출
-            full_text = soup.get_text(separator=' ', strip=True)
+            # 🆕 3단계: 전체 텍스트 추출 (우선순위 고려)
+            remaining_text = soup.get_text(separator=' ', strip=True)
+            
+            # 🆕 4단계: 우선순위 텍스트 + 나머지 텍스트 결합
+            if priority_text:
+                full_text = f"{priority_text}\n--- 기타 내용 ---\n{remaining_text}"
+                print(f"📍 우선순위 섹션 발견: {len(priority_text)} 문자")
+            else:
+                full_text = remaining_text
             
             self.stats['crawling_performed'] += 1
             print(f"✅ 크롤링 성공: {organization_name} ({len(full_text)} 문자)")
@@ -1249,9 +1535,56 @@ class EnhancedDetailExtractor:
         except Exception as e:
             print(f"❌ 크롤링 실패 ({organization_name}): {str(e)[:100]}...")
             return ""
+        
+    def _extract_contact_priority_sections(self, soup, organization_name):
+        """🆕 연락처 관련 섹션 우선 추출"""
+        priority_text = ""
+        
+        try:
+            # 연락처 관련 키워드로 섹션 찾기
+            contact_keywords = [
+                r'contact', r'연락처', r'문의', r'찾아오시는길', 
+                r'회사정보', r'about', r'footer', r'company.*info',
+                r'tel', r'phone', r'address', r'오시는길'
+            ]
+            
+            contact_pattern = '|'.join(contact_keywords)
+            
+            # 1순위: class나 id에 연락처 관련 키워드가 있는 요소들
+            contact_sections = soup.find_all(['div', 'section', 'footer', 'aside'], 
+                                        attrs={'class': re.compile(contact_pattern, re.I)})
+            
+            contact_sections.extend(soup.find_all(['div', 'section', 'footer', 'aside'], 
+                                                attrs={'id': re.compile(contact_pattern, re.I)}))
+            
+            # 2순위: footer 태그 전체
+            if not contact_sections:
+                footer = soup.find('footer')
+                if footer:
+                    contact_sections = [footer]
+            
+            # 3순위: aside 태그들
+            if not contact_sections:
+                contact_sections = soup.find_all('aside')
+            
+            # 텍스트 추출 및 정제
+            for section in contact_sections[:3]:  # 최대 3개 섹션만
+                section_text = section.get_text(separator=' ', strip=True)
+                if len(section_text) > 20:  # 의미있는 길이의 텍스트만
+                    priority_text += f"{section_text}\n"
+            
+            if priority_text:
+                priority_text = priority_text.strip()
+                print(f"📍 우선순위 섹션 추출: {len(contact_sections)}개 섹션, {len(priority_text)} 문자")
+            
+            return priority_text
+            
+        except Exception as e:
+            print(f"⚠️ 우선순위 섹션 추출 실패 ({organization_name}): {e}")
+            return ""
     
     async def crawl_and_extract_async(self, org_data):
-        """개선된 비동기 크롤링 및 AI 추출"""
+        """🔧 개선된 비동기 크롤링 및 지능형 AI 추출"""
         org_name = org_data.get('name', 'Unknown')
         homepage_url = org_data.get('homepage', '')
         
@@ -1264,57 +1597,120 @@ class EnhancedDetailExtractor:
         if not homepage_text:
             return {}
         
-        # 텍스트 길이 제한 (너무 긴 텍스트는 잘라서 처리)
-        max_text_length = 10000  # 10KB로 제한
+        # 🆕 스마트 텍스트 길이 제한
+        max_text_length = 12000  # 12KB로 증가
         if len(homepage_text) > max_text_length:
-            homepage_text = homepage_text[:max_text_length]
-            print(f"📏 텍스트 길이 제한: {org_name} ({max_text_length} 문자로 제한)")
+            homepage_text = self._smart_truncate_text(homepage_text, max_text_length, org_name)
+            print(f"📏 스마트 텍스트 제한: {org_name} ({len(homepage_text)} 문자)")
         
-        # 청크 처리 개선
+        # 🆕 지능형 청킹
+        chunks = self._intelligent_chunking(homepage_text, org_name)
+        max_chunks = min(5, len(chunks))  # 최대 5개 청크
+        
+        print(f"📝 총 {len(chunks)}개 청크 생성, {max_chunks}개 처리 예정: {org_name}")
+
+    def _smart_truncate_text(self, text, max_length, org_name):
+        """🆕 스마트 텍스트 절단 (연락처 패턴 보존)"""
+        if len(text) <= max_length:
+            return text
+        
+        try:
+            # 연락처 패턴이 있는 부분 찾기
+            contact_patterns = [
+                r'\d{2,3}[-\s]*\d{3,4}[-\s]*\d{4}',  # 전화번호
+                r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',  # 이메일
+                r'\d{5}',  # 우편번호
+            ]
+            
+            contact_positions = []
+            for pattern in contact_patterns:
+                for match in re.finditer(pattern, text):
+                    contact_positions.append((match.start(), match.end()))
+            
+            if contact_positions:
+                # 연락처 정보 주변을 우선 보존
+                contact_positions.sort()
+                
+                # 가장 빠른 연락처부터 max_length만큼 추출
+                start_pos = max(0, contact_positions[0][0] - 1000)  # 앞쪽 1000자 여유
+                end_pos = min(len(text), start_pos + max_length)
+                
+                truncated = text[start_pos:end_pos]
+                print(f"📍 연락처 패턴 기준 절단: {org_name} (위치: {start_pos}-{end_pos})")
+                return truncated
+            else:
+                # 연락처 패턴이 없으면 문장 단위로 절단
+                return self._sentence_aware_truncate(text, max_length)
+                
+        except Exception as e:
+            print(f"⚠️ 스마트 절단 실패, 기본 절단 사용: {org_name} - {e}")
+            return text[:max_length]
+
+    def _sentence_aware_truncate(self, text, max_length):
+        """🆕 문장 단위 절단"""
+        if len(text) <= max_length:
+            return text
+        
+        truncated = text[:max_length]
+        
+        # 문장 끝 찾기
+        sentence_ends = ['.', '!', '?', '\n', '다.', '음.', '니다.']
+        
+        best_cut = max_length
+        for end_char in sentence_ends:
+            pos = truncated.rfind(end_char)
+            if pos > max_length * 0.8:  # 80% 이상 지점에서 발견되면
+                best_cut = pos + 1
+                break
+        
+        return text[:best_cut]
+
+    def _intelligent_chunking(self, text, org_name):
+        """🆕 지능형 청킹 (연락처 패턴 고려)"""
+        chunks = []
         chunk_size = 2000
-        overlap = 200
-        max_chunks = 5  # 최대 청크 수 제한
-        ai_results = {}
-        processed_chunks = 0
+        min_overlap = 100
+        max_overlap = 500
         
-        for i in range(0, len(homepage_text), chunk_size - overlap):
-            if processed_chunks >= max_chunks:
-                print(f"⚠️ 최대 청크 수 도달: {org_name} (5개 청크 처리 완료)")
-                break
+        try:
+            # 연락처 패턴 위치 파악
+            contact_pattern = r'(\d{2,3}[-\s]*\d{3,4}[-\s]*\d{4}|[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|\d{5})'
+            contact_positions = [m.start() for m in re.finditer(contact_pattern, text)]
+            
+            i = 0
+            while i < len(text):
+                chunk_start = i
+                chunk_end = min(i + chunk_size, len(text))
                 
-            chunk = homepage_text[i:i + chunk_size]
-            if len(chunk) < 100:  # 너무 짧은 청크는 스킵
-                continue
-            
-            print(f"📝 청크 {processed_chunks + 1}/{max_chunks} 처리 중: {org_name}")
-            
-            chunk_result = await self.extract_with_ai_structured_async(chunk, org_name)
-            processed_chunks += 1
-            
-            # 결과 병합
-            for key, value in chunk_result.items():
-                if key not in ai_results:
-                    ai_results[key] = []
+                # 연락처 패턴이 청크 경계 근처에 있는지 확인
+                has_contact_near_boundary = any(
+                    abs(pos - chunk_end) < 100 for pos in contact_positions 
+                    if chunk_start <= pos <= chunk_end + 100
+                )
                 
-                if isinstance(value, list):
-                    for item in value:
-                        if item not in ai_results[key]:
-                            ai_results[key].append(item)
+                if has_contact_near_boundary and chunk_end < len(text):
+                    # 연락처 근처에서는 더 큰 겹침 사용
+                    overlap = max_overlap
+                    print(f"📞 연락처 패턴 감지, 큰 겹침 적용: {org_name}")
                 else:
-                    if value not in ai_results[key]:
-                        ai_results[key].append(value)
+                    overlap = min_overlap
+                
+                chunk = text[chunk_start:chunk_end]
+                
+                if len(chunk.strip()) > 50:  # 의미있는 길이만
+                    chunks.append(chunk)
+                
+                # 다음 청크 시작점 계산
+                i = chunk_end - overlap if chunk_end < len(text) else len(text)
             
-            # 충분한 정보를 찾았으면 중단 (효율성 개선)
-            essential_fields = ['phone', 'email', 'address']
-            found_fields = sum(1 for field in essential_fields if ai_results.get(field))
+            print(f"📊 지능형 청킹 완료: {len(chunks)}개 청크 생성")
+            return chunks
             
-            if found_fields >= 2:  # 3개 중 2개 이상 찾으면 중단
-                print(f"✅ 충분한 정보 발견: {org_name} ({found_fields}/{len(essential_fields)} 필드)")
-                break
-        
-        print(f"📊 {org_name}: {processed_chunks}개 청크 처리 완료")
-        return ai_results
-    
+        except Exception as e:
+            print(f"⚠️ 지능형 청킹 실패, 기본 청킹 사용: {org_name} - {e}")
+            # 폴백: 기본 청킹
+            return [text[i:i+chunk_size] for i in range(0, len(text), chunk_size-200)]
+
     def needs_additional_crawling(self, json_info):
         """추가 크롤링이 필요한지 판단"""
         missing_count = 0
