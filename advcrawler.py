@@ -12,6 +12,7 @@ import re
 import time
 import random
 import os
+import glob
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 from urllib.parse import urljoin, urlparse
@@ -643,6 +644,30 @@ class AdvancedChurchCrawler:
         except Exception as e:
             print(f"❌ 중간 저장 실패: {e}")
     
+    def cleanup_intermediate_files(self):
+        """중간 결과 파일들 일괄 삭제"""
+        try:
+            # churches_enhanced_intermediate_*.json 패턴으로 파일 찾기
+            intermediate_files = glob.glob("churches_enhanced_intermediate_*.json")
+            
+            if not intermediate_files:
+                print("🗂️ 삭제할 중간 파일이 없습니다.")
+                return
+            
+            deleted_count = 0
+            for file in intermediate_files:
+                try:
+                    os.remove(file)
+                    print(f"🗑️ 삭제됨: {file}")
+                    deleted_count += 1
+                except Exception as e:
+                    print(f"❌ 파일 삭제 실패 ({file}): {e}")
+            
+            print(f"✅ 중간 파일 정리 완료: {deleted_count}개 파일 삭제")
+            
+        except Exception as e:
+            print(f"❌ 중간 파일 정리 실패: {e}")
+    
     def save_final_results(self, results: List[Dict]) -> str:
         """최종 결과 저장"""
         try:
@@ -653,6 +678,11 @@ class AdvancedChurchCrawler:
                 json.dump(results, f, ensure_ascii=False, indent=2)
             
             print(f"✅ 최종 결과 저장: {filename}")
+            
+            # 중간 파일들 정리
+            print("🧹 중간 파일 정리 중...")
+            self.cleanup_intermediate_files()
+            
             return filename
             
         except Exception as e:
