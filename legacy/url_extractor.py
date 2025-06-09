@@ -524,7 +524,7 @@ def main():
         extractor = URLExtractor(headless=use_headless)
         
         # 입력/출력 파일 설정
-        input_file = r"C:\Users\MyoengHo Shin\pjt\advanced_crawling\raw_data_0530.json"
+        input_file = r"C:\Users\kimyh\makedb\Python\cradcrawl_adv\undefined_converted_20250609_134731.json"
         output_file = f"raw_data_with_homepages_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         
         print(f"📂 입력 파일: {input_file}")
