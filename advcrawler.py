@@ -12,6 +12,7 @@ import re
 import time
 import random
 import os
+import glob
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 from urllib.parse import urljoin, urlparse
@@ -371,7 +372,8 @@ class AdvancedChurchCrawler:
 **중요 규칙:**
 1. {church_name}와 직접 관련된 연락처만 추출
 2. 대표번호, 메인 연락처 우선
-3. 확실하지 않으면 "없음"으로 표시
+3. 대표번화와 팩스번호는 일치하지 않으니 이점 확실히 할 것
+4. 확실하지 않으면 "없음"으로 표시
 
 **분석할 텍스트:**
 {{text_content}}
@@ -630,8 +632,11 @@ class AdvancedChurchCrawler:
         return results
     
     async def save_intermediate_results(self, results: List[Dict], count: int):
-        """중간 결과 저장"""
+        """중간 결과 저장 (이전 파일 자동 삭제)"""
         try:
+            # 이전 중간 파일 삭제 (현재 저장할 파일 제외)
+            self.cleanup_previous_intermediate_files(count)
+            
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"churches_enhanced_intermediate_{count}_{timestamp}.json"
             
@@ -642,6 +647,40 @@ class AdvancedChurchCrawler:
             
         except Exception as e:
             print(f"❌ 중간 저장 실패: {e}")
+
+    def cleanup_previous_intermediate_files(self, current_count: int):
+        """이전 중간 파일들 삭제 (현재 저장할 파일 제외)"""
+        try:
+            # churches_enhanced_intermediate_*.json 패턴으로 파일 찾기
+            intermediate_files = glob.glob("churches_enhanced_intermediate_*.json")
+            
+            if not intermediate_files:
+                return
+            
+            deleted_count = 0
+            for file in intermediate_files:
+                try:
+                    # 파일명에서 카운트 추출
+                    # 패턴: churches_enhanced_intermediate_{count}_{timestamp}.json
+                    parts = file.split('_')
+                    if len(parts) >= 4:
+                        file_count = int(parts[3])  # count 부분 추출
+                        
+                        # 현재 저장할 파일의 카운트보다 작은 경우에만 삭제
+                        if file_count < current_count:
+                            os.remove(file)
+                            print(f"🗑️ 이전 파일 삭제: {file}")
+                            deleted_count += 1
+                            
+                except (ValueError, IndexError, OSError) as e:
+                    print(f"⚠️ 파일 삭제 중 오류 ({file}): {e}")
+                    continue
+            
+            if deleted_count > 0:
+                print(f"✅ {deleted_count}개 이전 중간 파일 삭제 완료")
+                
+        except Exception as e:
+            print(f"❌ 이전 파일 정리 중 오류: {e}")
     
     def save_final_results(self, results: List[Dict]) -> str:
         """최종 결과 저장"""
@@ -653,6 +692,11 @@ class AdvancedChurchCrawler:
                 json.dump(results, f, ensure_ascii=False, indent=2)
             
             print(f"✅ 최종 결과 저장: {filename}")
+            
+            # 중간 파일들 정리
+            print("🧹 중간 파일 정리 중...")
+            self.cleanup_intermediate_files()
+            
             return filename
             
         except Exception as e:
@@ -695,8 +739,24 @@ async def main():
     # 크롤러 인스턴스 생성
     crawler = AdvancedChurchCrawler()
     
+    # 입력 파일 경로 설정 (사용자 지정)
+    input_file = r"C:\Users\kimyh\makedb\Python\cradcrawl_adv\raw_data_with_homepages_20250609_134906.json"
+    
+    # 파일 존재 확인
+    if not os.path.exists(input_file):
+        print(f"❌ 입력 파일을 찾을 수 없습니다: {input_file}")
+        
+        # 현재 디렉토리에서 대체 파일 찾기
+        alternative_files = glob.glob("raw_data_with_homepages_*.json")
+        if alternative_files:
+            latest_file = max(alternative_files, key=os.path.getctime)
+            print(f"🔍 대신 사용할 파일을 찾았습니다: {latest_file}")
+            input_file = latest_file
+        else:
+            print("❌ 대체 파일도 찾을 수 없습니다. 프로그램을 종료합니다.")
+            return
+    
     # JSON 파일 로드
-    input_file = "combined_20250605_131931.json"
     churches_data = crawler.load_json_data(input_file)
     
     if not churches_data:
@@ -706,9 +766,22 @@ async def main():
     print(f"📂 입력 파일: {input_file}")
     print(f"📊 처리할 교회 수: {len(churches_data)}")
     
+    # 처리할 개수 제한 옵션 추가
+    max_process = input(f"처리할 교회 수 (전체: {len(churches_data)}개, 엔터=전체): ").strip()
+    
+    if max_process and max_process.isdigit():
+        max_process = int(max_process)
+        churches_data = churches_data[:max_process]
+        print(f"📊 실제 처리할 교회 수: {len(churches_data)}")
+    
     # 사용자 확인
     print(f"\n⚠️ {len(churches_data)}개 교회의 홈페이지를 크롤링합니다.")
     print("이 작업은 시간이 오래 걸릴 수 있습니다.")
+    
+    proceed = input("계속 진행하시겠습니까? (y/N): ").strip().lower()
+    if proceed not in ['y', 'yes']:
+        print("❌ 사용자에 의해 취소되었습니다.")
+        return
     
     try:
         # 모든 교회 처리
@@ -722,6 +795,12 @@ async def main():
         
         print(f"\n🎉 크롤링 완료!")
         print(f"📁 출력 파일: {output_file}")
+        
+        # Excel 변환 옵션
+        excel_convert = input("\nExcel 파일로 변환하시겠습니까? (y/N): ").strip().lower()
+        if excel_convert in ['y', 'yes']:
+            print("📊 Excel 변환을 위해 jsontoexcel.py를 실행하세요.")
+            print(f"💡 명령어: python jsontoexcel.py")
         
     except KeyboardInterrupt:
         print("\n⏹️ 사용자에 의해 중단되었습니다.")

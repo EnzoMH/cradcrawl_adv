@@ -7,6 +7,7 @@ JSON to Excel 변환기 (Gemini AI 검증 포함)
 
 import json
 import os
+import sys
 import glob
 import re
 import asyncio
@@ -14,32 +15,34 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional
 import traceback
 
+# 상위 디렉토리를 Python path에 추가 (ai_helpers 모듈 접근용)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+
+# Excel 관련 import
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.utils import get_column_letter
+
 # 환경변수 로드
 try:
     from dotenv import load_dotenv
     load_dotenv()
     print("✅ .env 파일 로드 완료")
 except ImportError:
-    print("⚠️ python-dotenv 패키지가 없습니다. 'pip install python-dotenv' 설치 권장")
+    print("⚠️ python-dotenv 모듈이 없습니다. 환경변수를 직접 설정해주세요.")
 
-# Excel 관련 라이브러리
+# AI 도우미 모듈 import (선택적)
 try:
-    from openpyxl import Workbook, load_workbook
-    from openpyxl.styles import Font, PatternFill, Alignment
-    from openpyxl.utils import get_column_letter
-    print("✅ openpyxl 라이브러리 로드 완료")
-except ImportError:
-    print("❌ openpyxl 라이브러리가 필요합니다. 설치: pip install openpyxl")
-    exit(1)
-
-# AI 관련 라이브러리 (선택적)
-try:
-    from ai_helpers import AIModelManager
+    from ai_helpers import AIManager
+    print("✅ ai_helpers 모듈 로드 완료")
     AI_AVAILABLE = True
-    print("🤖 AI 검증 기능 사용 가능")
-except ImportError:
+except ImportError as e:
+    print(f"⚠️ ai_helpers 모듈이 없어 AI 검증 기능 비활성화: {e}")
+    AIManager = None
     AI_AVAILABLE = False
-    print("⚠️ AI 검증 기능 비활성화 (ai_helpers 모듈 없음)")
 
 class ContactDataExtractor:
     """연락처 데이터 추출 및 검증 클래스"""
@@ -54,7 +57,7 @@ class ContactDataExtractor:
         if AI_AVAILABLE and api_key:
             try:
                 # AIModelManager에 API 키 전달 (필요시)
-                self.ai_manager = AIModelManager()
+                self.ai_manager = AIManager()
                 print("🤖 AI 모델 초기화 완료 (.env에서 API 키 로드)")
             except Exception as e:
                 print(f"⚠️ AI 모델 초기화 실패: {e}")
@@ -64,20 +67,54 @@ class ContactDataExtractor:
         else:
             print("⚠️ ai_helpers 모듈이 없어 AI 검증 기능 비활성화")
     
+    def find_latest_enhanced_file() -> str:
+        """가장 최근의 churches_enhanced_final_*.json 파일 찾기"""
+        try:
+            # churches_enhanced_final_*.json 패턴으로 파일 찾기
+            pattern = "churches_enhanced_final_*.json"
+            files = glob.glob(pattern)
+            
+            if not files:
+                print(f"❌ {pattern} 패턴의 파일을 찾을 수 없습니다.")
+                return ""
+            
+            # 가장 최근 파일 선택 (파일 생성 시간 기준)
+            latest_file = max(files, key=os.path.getctime)
+            
+            print(f"🔍 발견된 파일들:")
+            for file in sorted(files, key=os.path.getctime, reverse=True):
+                marker = " ← 선택됨" if file == latest_file else ""
+                creation_time = datetime.fromtimestamp(os.path.getctime(file)).strftime("%Y-%m-%d %H:%M:%S")
+                print(f"  📄 {file} (생성: {creation_time}){marker}")
+            
+            return latest_file
+            
+        except Exception as e:
+            print(f"❌ 파일 검색 중 오류: {e}")
+            return ""
+
     def find_latest_json_file(self) -> Optional[str]:
         """가장 최근의 raw_data_with_homepages_*.json 파일 찾기"""
-        pattern = "raw_data_with_homepages_*.json"
-        files = glob.glob(pattern)
+        # 현재 디렉토리와 상위 디렉토리에서 검색
+        patterns = [
+            "raw_data_with_homepages_*.json",      # 현재 디렉토리
+            "../raw_data_with_homepages_*.json"    # 상위 디렉토리
+        ]
         
-        if not files:
+        all_files = []
+        for pattern in patterns:
+            files = glob.glob(pattern)
+            all_files.extend(files)
+        
+        if not all_files:
             print("❌ raw_data_with_homepages_*.json 파일을 찾을 수 없습니다.")
             return None
         
         # 파일명에서 날짜/시간 추출하여 가장 최근 파일 선택
-        latest_file = max(files, key=os.path.getctime)
+        latest_file = max(all_files, key=os.path.getctime)
         print(f"📂 발견된 파일: {latest_file}")
         return latest_file
-    
+        
     def filter_news_content(self, text: str) -> bool:
         """news 키워드가 포함된 내용 필터링"""
         if not text:
@@ -284,15 +321,14 @@ class ContactDataExtractor:
         
         return parsed
     
-    def chunk_json_data(self, data: Dict[str, List], chunk_size: int = 50) -> List[Dict[str, List]]:
+    def chunk_json_data(self, data: List[Dict], chunk_size: int = 50) -> List[List[Dict]]:
         """JSON 데이터를 청크 단위로 분할 (context limit 대응)"""
         chunks = []
         
-        for category, organizations in data.items():
-            # 각 카테고리를 chunk_size 단위로 분할
-            for i in range(0, len(organizations), chunk_size):
-                chunk = {category: organizations[i:i + chunk_size]}
-                chunks.append(chunk)
+        # 리스트를 chunk_size 단위로 분할
+        for i in range(0, len(data), chunk_size):
+            chunk = data[i:i + chunk_size]
+            chunks.append(chunk)
         
         print(f"📦 데이터를 {len(chunks)}개 청크로 분할 (청크당 최대 {chunk_size}개 기관)")
         return chunks
@@ -309,7 +345,7 @@ class ContactDataExtractor:
             with open(json_file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
-            print(f"✅ JSON 파일 로드 완료: {len(data)}개 카테고리")
+            print(f"✅ JSON 파일 로드 완료: {len(data)}개 기관")
             
             # Excel 워크북 생성
             wb = Workbook()
@@ -343,51 +379,48 @@ class ContactDataExtractor:
             for chunk_idx, chunk in enumerate(chunks):
                 print(f"📦 청크 {chunk_idx + 1}/{len(chunks)} 처리 중...")
                 
-                for category, organizations in chunk.items():
-                    print(f"📂 처리 중: {category} ({len(organizations)}개 기관)")
+                for org in chunk:
+                    # 기본 연락처 정보 추출
+                    contact_info = self.extract_contact_info(org)
                     
-                    for org in organizations:
-                        # 기본 연락처 정보 추출
-                        contact_info = self.extract_contact_info(org)
-                        
-                        # 기본 일치성 검증
-                        validation_result = self.validate_contact_consistency(org, contact_info)
-                        
-                        # Excel 행에 기본 데이터 입력
-                        ws.cell(row=row_num, column=1, value=contact_info["기관명"])
-                        ws.cell(row=row_num, column=2, value=contact_info["전화번호"])
-                        ws.cell(row=row_num, column=3, value=contact_info["fax번호"])
-                        ws.cell(row=row_num, column=4, value=contact_info["이메일"])
-                        ws.cell(row=row_num, column=5, value=contact_info["url"])
-                        
-                        # AI 검증 (선택적)
-                        if use_ai_validation and self.ai_manager and not validation_result["is_consistent"]:
-                            try:
-                                ai_result = await self.ai_validate_contact_data(org, contact_info)
-                                parsed_ai = ai_result.get("parsed_validation", {})
-                                
-                                ws.cell(row=row_num, column=6, value="AI검증완료" if ai_result.get("ai_validation") == "완료" else "검증실패")
-                                ws.cell(row=row_num, column=7, value=parsed_ai.get("consistency_score", ""))
-                                ws.cell(row=row_num, column=8, value=parsed_ai.get("reliability", ""))
-                                ws.cell(row=row_num, column=9, value=parsed_ai.get("problems", ""))
-                                
-                                ai_validation_count += 1
-                                
-                            except Exception as ai_err:
-                                print(f"⚠️ AI 검증 오류 ({contact_info['기관명']}): {ai_err}")
-                                ws.cell(row=row_num, column=6, value="AI검증오류")
-                        
-                        elif use_ai_validation and self.ai_manager:
-                            ws.cell(row=row_num, column=6, value="검증통과")
-                            ws.cell(row=row_num, column=7, value="100")
-                            ws.cell(row=row_num, column=8, value="높음")
-                        
-                        row_num += 1
-                        total_count += 1
-                        
-                        # 진행 상황 표시 (50개마다)
-                        if total_count % 50 == 0:
-                            print(f"   📝 {total_count}개 기관 처리 완료...")
+                    # 기본 일치성 검증
+                    validation_result = self.validate_contact_consistency(org, contact_info)
+                    
+                    # Excel 행에 기본 데이터 입력
+                    ws.cell(row=row_num, column=1, value=contact_info["기관명"])
+                    ws.cell(row=row_num, column=2, value=contact_info["전화번호"])
+                    ws.cell(row=row_num, column=3, value=contact_info["fax번호"])
+                    ws.cell(row=row_num, column=4, value=contact_info["이메일"])
+                    ws.cell(row=row_num, column=5, value=contact_info["url"])
+                    
+                    # AI 검증 (선택적)
+                    if use_ai_validation and self.ai_manager and not validation_result["is_consistent"]:
+                        try:
+                            ai_result = await self.ai_validate_contact_data(org, contact_info)
+                            parsed_ai = ai_result.get("parsed_validation", {})
+                            
+                            ws.cell(row=row_num, column=6, value="AI검증완료" if ai_result.get("ai_validation") == "완료" else "검증실패")
+                            ws.cell(row=row_num, column=7, value=parsed_ai.get("consistency_score", ""))
+                            ws.cell(row=row_num, column=8, value=parsed_ai.get("reliability", ""))
+                            ws.cell(row=row_num, column=9, value=parsed_ai.get("problems", ""))
+                            
+                            ai_validation_count += 1
+                            
+                        except Exception as ai_err:
+                            print(f"⚠️ AI 검증 오류 ({contact_info['기관명']}): {ai_err}")
+                            ws.cell(row=row_num, column=6, value="AI검증오류")
+                    
+                    elif use_ai_validation and self.ai_manager:
+                        ws.cell(row=row_num, column=6, value="검증통과")
+                        ws.cell(row=row_num, column=7, value="100")
+                        ws.cell(row=row_num, column=8, value="높음")
+                    
+                    row_num += 1
+                    total_count += 1
+                    
+                    # 진행 상황 표시 (50개마다)
+                    if total_count % 50 == 0:
+                        print(f"   📝 {total_count}개 기관 처리 완료...")
             
             # 열 너비 자동 조정
             for col in range(1, len(headers) + 1):
@@ -476,48 +509,54 @@ class ContactDataExtractor:
         except Exception as e:
             print(f"❌ 통계 계산 중 오류: {e}")
 
-async def main():
+def main():
     """메인 실행 함수"""
-    print("=" * 70)
-    print("📊 JSON to Excel 변환기 (AI 검증 포함)")
-    print("=" * 70)
+    print("=" * 60)
+    print("📊 JSON to Excel 변환기 (고급 크롤링 결과용)")
+    print("=" * 60)
     
-    # 추출기 초기화
+    # ContactDataExtractor 인스턴스 생성
     extractor = ContactDataExtractor()
     
-    # 최신 JSON 파일 찾기
-    json_file = extractor.find_latest_json_file()
-    if not json_file:
-        print("💡 raw_data_with_homepages_YYYYMMDD_HHMMSS.json 파일이 현재 디렉토리에 있는지 확인하세요.")
+    # 파일 경로 설정
+    json_file = r"C:\Users\kimyh\makedb\Python\cradcrawl_adv\churches_enhanced_final_20250610_144056.json"
+    
+    # 타임스탬프 포함한 엑셀 파일명 생성
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    excel_file = f"church_data_enhanced_{timestamp}.xlsx"
+    
+    print(f"📂 입력 파일: {json_file}")
+    print(f"💾 출력 파일: {excel_file}")
+    
+    # 파일 존재 확인
+    if not os.path.exists(json_file):
+        print(f"❌ 입력 파일을 찾을 수 없습니다: {json_file}")
         return
     
-    # 출력 Excel 파일명 생성
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    excel_file = f"contact_data_{timestamp}.xlsx"
-    
-    # AI 검증 사용 여부 확인
-    use_ai = AI_AVAILABLE and extractor.ai_manager is not None
-    if use_ai:
-        print("🤖 AI 검증 기능이 활성화됩니다.")
-    else:
-        print("⚠️ AI 검증 기능이 비활성화됩니다.")
-    
-    print(f"🔄 변환 시작...")
-    
-    # JSON to Excel 변환
-    success = await extractor.process_json_to_excel(json_file, excel_file, use_ai_validation=use_ai)
+    # JSON to Excel 변환 실행
+    success = asyncio.run(extractor.process_json_to_excel(json_file, excel_file, use_ai_validation=False))
     
     if success:
-        # 미리보기 출력
-        extractor.preview_excel_data(excel_file)
+        print(f"\n🎉 변환 완료!")
+        print(f"📁 생성된 파일: {excel_file}")
+        
+        # 결과 미리보기
+        extractor.preview_excel_data(excel_file, num_rows=3)
         
         # 통계 출력
         extractor.count_excel_statistics(excel_file)
         
-        print(f"\n✅ 변환 완료!")
-        print(f"📁 생성된 파일: {excel_file}")
+        # 파일 크기 정보
+        try:
+            file_size = os.path.getsize(excel_file) / (1024 * 1024)  # MB 단위
+            print(f"📏 파일 크기: {file_size:.2f} MB")
+        except:
+            pass
     else:
-        print(f"\n❌ 변환 실패!")
+        print("❌ 변환 실패")
+
+if __name__ == "__main__":
+    main()  # asyncio.run()은 이미 process_json_to_excel() 호출 시 사용됨
 
 if __name__ == "__main__":
     asyncio.run(main()) 

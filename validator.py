@@ -8,6 +8,34 @@
 import re
 import logging
 
+
+# .env 파일 로드
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # .env 파일에서 환경변수 로드
+    print("✅ .env 파일 로드 완료")
+except ImportError:
+    print("⚠️ python-dotenv가 설치되지 않음. pip install python-dotenv 실행 필요")
+    print("💡 수동으로 환경변수 설정을 시도합니다...")
+    
+    # .env 파일 수동 로드
+    try:
+        env_path = os.path.join(os.getcwd(), '.env')
+        if os.path.exists(env_path):
+            with open(env_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        key, value = line.split('=', 1)
+                        key = key.strip()
+                        value = value.strip().strip('"\'')  # 따옴표 제거
+                        os.environ[key] = value
+            print("✅ .env 파일 수동 로드 완료")
+        else:
+            print("❌ .env 파일을 찾을 수 없습니다.")
+    except Exception as e:
+        print(f"❌ .env 파일 로드 실패: {e}")
+
 class ContactValidator:
     def __init__(self):
         # 전화번호 정규식 패턴 (Finding_Church_Fax.py와 동일)
@@ -280,6 +308,40 @@ class ContactValidator:
         
         return result
 
+from ai_helpers import AIModelManager
+import os
+from dotenv import load_dotenv
+
+class AIValidator :
+    def __init__(self): 
+        self.logger = self._setup_logger()
+        # API 키 확인
+        api_key = os.getenv('GEMINI_API_KEY')
+        if api_key:
+            print(f"🔑 GEMINI_API_KEY 로드 성공: {api_key[:10]}...{api_key[-4:]}")
+        else:
+            print("❌ GEMINI_API_KEY를 찾을 수 없습니다.")
+            print("💡 .env 파일에 GEMINI_API_KEY='your_api_key' 형식으로 저장했는지 확인하세요.")
+        # AI 매니저 초기화 (개선)
+        self.ai_manager = None
+        self.use_ai = False
+
+        try:
+            if api_key:
+                self.ai_manager = AIModelManager()
+                self.use_ai = True
+                print("🤖 AI 모델 매니저 초기화 성공")
+            else:
+                print("🔧 AI 기능 비활성화 (API 키 없음)")
+        except Exception as e:
+            print(f"❌ AI 모델 매니저 초기화 실패: {e}")
+            self.ai_manager = None
+            self.use_ai = False
+    
+    def _setup_logger(self):
+        """로거 설정"""
+        logger = logging.getLogger('ai_validator')
+        logger.setLevel(logging.INFO)
 
 def main():
     """테스트 함수"""
