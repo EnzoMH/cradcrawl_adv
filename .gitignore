@@ -1,5 +1,5 @@
 # JSON files
-*.json
+# *.json
 
 # Excel files
 *.xlsx
