@@ -184,14 +184,39 @@ class VPNManager:
         """소멸자에서 VPN 연결 정리"""
         self.disconnect_vpn()
 
+# 기존 경로 설정 뒤에 추가
+# 상위 디렉토리 모듈 import (경로 설정 후)
+try:
+    from validator import AIValidator
+    print("✅ AIValidator import 성공")
+except ImportError as e:
+    print(f"⚠️ AIValidator import 실패: {e}")
+    print("🔧 AIValidator 없이 기본 기능만 사용합니다.")
+    AIValidator = None
+
 class URLExtractor:
     """URL 추출 및 홈페이지 검색 클래스 (Selenium 기반 + VPN 우회)"""
     
     def __init__(self, headless: bool = False):
+        """초기화"""
         self.headless = headless
         self.driver = None
         self.logger = self.setup_logger()
         self.vpn_manager = VPNManager()
+        
+        # AI 검증기 초기화 (새로 추가)
+        self.ai_validator = None
+        if AIValidator:
+            try:
+                self.ai_validator = AIValidator()
+                self.use_ai_validation = True
+                print("🤖 AI 검증 기능 활성화")
+            except Exception as e:
+                print(f"❌ AI 검증기 초기화 실패: {e}")
+                self.use_ai_validation = False
+        else:
+            self.use_ai_validation = False
+            print("🔧 AI 검증 기능 비활성화")
         
         # 요청 간 지연 시간 (초)
         self.delay_range = (3, 6)
@@ -368,19 +393,19 @@ class URLExtractor:
             return f'{cleaned} 홈페이지'
     
     def search_organization_homepage(self, organization_name: str, location: str = "") -> Optional[str]:
-        """기관 홈페이지 검색 (네이버 + 구글 동시 검색)"""
+        """기관 홈페이지 검색 (AI 검증 포함)"""
         try:
             if not self.driver:
                 self.setup_driver()
             
-            all_found_urls = []
+            candidate_urls = []
             
             # 네이버 검색 실행
             self.logger.info(f"🔍 네이버 검색 시작: {organization_name}")
             naver_urls = self._search_with_naver(organization_name)
             if naver_urls:
                 self.logger.info(f"네이버에서 {len(naver_urls)}개 URL 발견")
-                all_found_urls.extend([(url, 'naver') for url in naver_urls])
+                candidate_urls.extend([(url, 'naver') for url in naver_urls])
             
             # 검색 간 지연
             self.add_delay()
@@ -390,15 +415,19 @@ class URLExtractor:
             google_urls = self._perform_google_search(organization_name, organization_name)
             if google_urls:
                 self.logger.info(f"구글에서 {len(google_urls)}개 URL 발견")
-                all_found_urls.extend([(url, 'google') for url in google_urls])
+                candidate_urls.extend([(url, 'google') for url in google_urls])
             
-            # 중복 제거 및 최적 URL 선택
-            if all_found_urls:
-                unique_urls = list(set([url for url, source in all_found_urls]))
+            # AI 검증 사용 가능한 경우
+            if self.use_ai_validation and candidate_urls:
+                return self._select_url_with_ai_validation(candidate_urls, organization_name)
+            
+            # AI 없는 경우 기존 방식으로 중복 제거 및 최적 URL 선택
+            if candidate_urls:
+                unique_urls = list(set([url for url, source in candidate_urls]))
                 best_url = self.select_best_homepage(unique_urls, organization_name)
                 
                 # 소스 정보 출력
-                sources = [source for url, source in all_found_urls if url == best_url]
+                sources = [source for url, source in candidate_urls if url == best_url]
                 source_info = f" (출처: {', '.join(set(sources))})" if sources else ""
                 self.logger.info(f"✅ 최종 선택 URL: {best_url}{source_info}")
                 
@@ -410,6 +439,102 @@ class URLExtractor:
         except Exception as e:
             self.logger.error(f"검색 중 오류 발생: {e}")
             return None
+        
+    def _select_url_with_ai_validation(self, candidate_urls: List[Tuple[str, str]], 
+                                     organization_name: str) -> Optional[str]:
+        """AI 검증으로 최적 URL 선택"""
+        import asyncio
+        
+        async def validate_urls():
+            validated_results = []
+            
+            for url, source in candidate_urls[:5]:  # 최대 5개만 검증
+                try:
+                    # 페이지 내용 미리보기
+                    page_content = self._get_page_preview(url)
+                    
+                    # AI 검증
+                    validation = await self.ai_validator.validate_homepage_url_relevance(
+                        organization_name, url, page_content, source
+                    )
+                    
+                    if validation.get("is_relevant", False) and validation.get("confidence", 0) > 0.6:
+                        validated_results.append({
+                            'url': url,
+                            'confidence': validation.get("confidence", 0),
+                            'source': source,
+                            'reasoning': validation.get("reasoning", "")
+                        })
+                        self.logger.info(f"✅ AI 검증 통과: {url} (신뢰도: {validation.get('confidence', 0):.2f})")
+                    else:
+                        self.logger.warning(f"❌ AI 검증 실패: {url} (신뢰도: {validation.get('confidence', 0):.2f})")
+                
+                except Exception as e:
+                    self.logger.warning(f"URL 검증 중 오류: {url} - {e}")
+                    continue
+            
+            return validated_results
+        
+        try:
+            # 비동기 검증 실행
+            validated_results = asyncio.run(validate_urls())
+            
+            if validated_results:
+                # 신뢰도 순으로 정렬
+                validated_results.sort(key=lambda x: x['confidence'], reverse=True)
+                best_result = validated_results[0]
+                
+                self.logger.info(f"🎯 AI 검증 최종 선택: {best_result['url']} "
+                               f"(신뢰도: {best_result['confidence']:.2f}, 출처: {best_result['source']})")
+                
+                return best_result['url']
+            
+            # AI 검증 실패시 기존 방식 fallback
+            self.logger.warning("AI 검증 결과 없음, 기존 방식으로 fallback")
+            unique_urls = list(set([url for url, source in candidate_urls]))
+            return self.select_best_homepage(unique_urls, organization_name)
+            
+        except Exception as e:
+            self.logger.error(f"AI 검증 중 오류: {e}")
+            # 오류시 기존 방식 사용
+            unique_urls = list(set([url for url, source in candidate_urls]))
+            return self.select_best_homepage(unique_urls, organization_name)
+
+    def _get_page_preview(self, url: str, max_chars: int = 2000) -> str:
+        """페이지 내용 미리보기 (AI 검증용)"""
+        try:
+            original_window = self.driver.current_window_handle
+            
+            # 새 탭에서 페이지 로드
+            self.driver.execute_script("window.open('');")
+            self.driver.switch_to.window(self.driver.window_handles[-1])
+            
+            self.driver.get(url)
+            time.sleep(2)
+            
+            # 페이지 내용 추출
+            try:
+                body_text = self.driver.find_element(By.TAG_NAME, "body").text
+                preview = body_text[:max_chars] if len(body_text) > max_chars else body_text
+            except:
+                preview = ""
+            
+            # 원래 창으로 돌아가기
+            self.driver.close()
+            self.driver.switch_to.window(original_window)
+            
+            return preview
+            
+        except Exception as e:
+            self.logger.warning(f"페이지 미리보기 실패: {url} - {e}")
+            try:
+                # 오류 시 원래 창으로 돌아가기
+                if len(self.driver.window_handles) > 1:
+                    self.driver.close()
+                self.driver.switch_to.window(self.driver.window_handles[0])
+            except:
+                pass
+            return ""
 
     def _search_with_naver(self, organization_name: str) -> List[str]:
         """네이버 검색 실행"""

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-고급 교회 연락처 크롤러
+고급 교회/기관/공부방 /기관/공부방 연락처 크롤러
 홈페이지를 크롤링하고 AI를 활용하여 연락처 정보를 정확하게 추출합니다.
 """
 
@@ -47,7 +47,7 @@ except ImportError:
 
 from bs4 import BeautifulSoup
 from parser import WebPageParser
-from validator import ContactValidator
+from validator import ContactValidator, AIValidator
 from ai_helpers import AIModelManager
 import urllib3
 
@@ -87,6 +87,15 @@ class AdvancedChurchCrawler:
             self.ai_manager = None
             self.use_ai = False
         
+        # URL 추출기 추가
+        try:
+            from legacy.url_extractor_enhanced import URLExtractorEnhanced
+            self.url_extractor = URLExtractorEnhanced(headless=True)
+            print("🔍 URL 추출기 초기화 성공")
+        except ImportError:
+            print("⚠️ URL 추출기 import 실패")
+            self.url_extractor = None
+        
         # 크롤링 설정
         self.timeout = 10
         self.max_retries = 3
@@ -114,6 +123,18 @@ class AdvancedChurchCrawler:
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
         })
+        
+        # AI 검증기 추가
+        try:
+            from validator import AIValidator
+            self.ai_validator = AIValidator()
+            print("🔍 AI URL/연락처 검증기 초기화 성공")
+        except ImportError:
+            print("⚠️ AI 검증기 import 실패")
+            self.ai_validator = None
+        except Exception as e:
+            print(f"❌ AI 검증기 초기화 실패: {e}")
+            self.ai_validator = None
     
     def setup_logger(self):
         """로거 설정"""
@@ -143,7 +164,7 @@ class AdvancedChurchCrawler:
                 data = json.load(f)
             
             if isinstance(data, list):
-                print(f"✅ {len(data)}개 교회 데이터 로드 완료")
+                print(f"✅ {len(data)}개 교회/기관/공부방  데이터 로드 완료")
                 return data
             else:
                 print("❌ 지원하지 않는 JSON 형식입니다.")
@@ -345,9 +366,9 @@ class AdvancedChurchCrawler:
             
             # AI 프롬프트 생성
             prompt_template = """
-'{church_name}' 교회의 연락처 정보를 정확하게 추출해주세요.
+'{church_name}' 교회/기관/공부방 의 연락처 정보를 정확하게 추출해주세요.
 
-**교회명:** {church_name}
+**교회/기관/공부방 명:** {church_name}
 
 **추출할 정보:**
 - 전화번호: 한국 형식 (02-1234-5678, 031-123-4567, 010-1234-5678)
@@ -379,7 +400,7 @@ class AdvancedChurchCrawler:
 {{text_content}}
 """
             
-            # 프롬프트에 교회명과 텍스트 삽입
+            # 프롬프트에 교회/기관/공부방 명과 텍스트 삽입
             final_prompt = prompt_template.format(church_name=church_name)
             
             # AI 호출
@@ -465,159 +486,148 @@ class AdvancedChurchCrawler:
         email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
         return bool(re.match(email_pattern, email))
     
-    def merge_extraction_results(self, parser_result: Dict, validator_result: Dict, ai_result: Dict) -> Dict:
-        """모든 추출 결과를 병합"""
+    def merge_ai_and_parser_results(self, ai_result: Dict, parser_result: Dict) -> Dict:
+        """AI 결과와 파서 결과 병합"""
         merged = {
             'phone': [],
             'fax': [],
             'email': [],
-            'mobile': [],
-            'postal_code': [],
-            'address': []
+            'address': [],
+            'postal_code': []
         }
         
-        try:
-            # 전화번호 병합 (검증된 것 우선)
-            all_phones = validator_result.get('phones', []) + parser_result.get('phones', []) + ai_result.get('phones', [])
-            merged['phone'] = list(dict.fromkeys(all_phones))  # 중복 제거
+        # AI 결과 우선, 파서 결과로 보완
+        field_mappings = [
+            ('phones', 'phone'),
+            ('faxes', 'fax'),
+            ('emails', 'email'),
+            ('addresses', 'address'),
+            ('postal_codes', 'postal_code')
+        ]
+        
+        for ai_field, merged_field in field_mappings:
+            # AI 결과
+            ai_values = ai_result.get(ai_field, [])
+            # 파서 결과
+            parser_values = parser_result.get(ai_field, [])
             
-            # 팩스번호 병합
-            all_faxes = validator_result.get('faxes', []) + parser_result.get('faxes', []) + ai_result.get('faxes', [])
-            merged['fax'] = list(dict.fromkeys(all_faxes))
-            
-            # 이메일 병합
-            all_emails = validator_result.get('emails', []) + parser_result.get('emails', []) + ai_result.get('emails', [])
-            merged['email'] = list(dict.fromkeys(all_emails))
-            
-            # 휴대폰 병합 (AI 결과 우선)
-            merged['mobile'] = list(dict.fromkeys(ai_result.get('mobiles', [])))
-            
-            # 우편번호 병합
-            all_postals = validator_result.get('postal_codes', []) + ai_result.get('postal_codes', [])
-            merged['postal_code'] = list(dict.fromkeys(all_postals))
-            
-            # 주소 병합
-            all_addresses = validator_result.get('addresses', []) + parser_result.get('addresses', []) + ai_result.get('addresses', [])
-            merged['address'] = list(dict.fromkeys(all_addresses))
-            
-            # 최대 1개씩만 유지 (가장 첫 번째 값)
-            for key in merged:
-                if merged[key]:
-                    merged[key] = merged[key][0]  # 첫 번째 값만
-                else:
-                    merged[key] = ""  # 빈 문자열
-            
-            return merged
-            
-        except Exception as e:
-            self.logger.error(f"결과 병합 오류: {e}")
-            return merged
+            # 중복 제거하여 병합
+            all_values = list(set(ai_values + parser_values))
+            merged[merged_field] = all_values[0] if all_values else ""
+        
+        return merged
     
     async def process_single_church(self, church_data: Dict) -> Dict:
-        """단일 교회 처리"""
+        """단일 교회/기관 처리 (URL 검색 + 연락처 추출)"""
         church_name = church_data.get('name', 'Unknown')
         homepage = church_data.get('homepage', '')
         
         print(f"\n🏢 처리 중: {church_name}")
-        self.logger.info(f"교회 처리 시작: {church_name}")
         
-        result = church_data.copy()  # 기존 데이터 복사
-        
-        # 추출된 연락처 정보 초기화
+        result = church_data.copy()
         extraction_summary = {
+            'url_search_performed': False,
+            'homepage_status': 'existing' if homepage else 'none',
             'parser_extracted': {},
             'validator_result': {},
             'ai_enhanced': {},
             'final_merged': {},
             'extraction_timestamp': datetime.now().isoformat(),
-            'homepage_status': 'not_processed',
             'ai_used': self.use_ai
         }
         
         self.stats['total_processed'] += 1
         
-        # 홈페이지가 없는 경우
-        if not homepage:
-            print(f"  ⚠️ 홈페이지 URL 없음")
-            extraction_summary['homepage_status'] = 'no_url'
-            result['extraction_summary'] = extraction_summary
-            return result
+        # 홈페이지가 없는 경우 URL 검색
+        if not homepage and self.url_extractor:
+            print(f"  🔍 홈페이지 URL 검색 중...")
+            homepage = self.url_extractor.search_organization_homepage(church_name)
+            if homepage:
+                result['homepage'] = homepage
+                extraction_summary['url_search_performed'] = True
+                extraction_summary['homepage_status'] = 'found'
+                print(f"  ✅ 홈페이지 발견: {homepage}")
+            else:
+                print(f"  ❌ 홈페이지 검색 실패")
+                extraction_summary['homepage_status'] = 'not_found'
         
-        try:
-            # 1단계: 웹페이지 가져오기
-            print(f"  🌐 홈페이지 접속: {homepage}")
-            html_content = self.fetch_webpage(homepage)
-            
-            if not html_content:
-                print(f"  ❌ 홈페이지 접속 실패")
-                extraction_summary['homepage_status'] = 'fetch_failed'
+        # 홈페이지가 있는 경우에만 연락처 추출
+        if homepage:
+            try:
+                # 1단계: 웹페이지 가져오기
+                print(f"  🌐 홈페이지 접속: {homepage}")
+                html_content = self.fetch_webpage(homepage)
+                
+                if not html_content:
+                    print(f"  ❌ 홈페이지 접속 실패")
+                    extraction_summary['homepage_status'] = 'fetch_failed'
+                    self.stats['failed_crawls'] += 1
+                    result['extraction_summary'] = extraction_summary
+                    return result
+                
+                # 2단계: BS4로 파싱
+                print(f"  📄 HTML 파싱 중...")
+                parsed_data = self.parse_with_bs4(html_content, homepage)
+                extraction_summary['homepage_status'] = 'parsed'
+                
+                # 3단계: parser.py로 기본 추출
+                print(f"  🔍 기본 연락처 추출 중...")
+                parser_result = self.extract_with_parser(parsed_data)
+                extraction_summary['parser_extracted'] = parser_result
+                
+                # 4단계: validator.py로 검증
+                print(f"  ✅ 연락처 검증 중...")
+                validator_result = self.validate_with_validator(parser_result)
+                extraction_summary['validator_result'] = validator_result
+                
+                # 5단계: AI로 추가 추출
+                ai_result = await self.enhance_with_ai(parsed_data, church_name)
+                extraction_summary['ai_enhanced'] = ai_result
+                
+                # 6단계: 결과 병합
+                print(f"  🔄 결과 병합 중...")
+                merged_result = self.merge_ai_and_parser_results(ai_result, parser_result)
+                extraction_summary['final_merged'] = merged_result
+                
+                # 7단계: 기존 빈 값을 추출된 값으로 업데이트
+                contact_fields = ['phone', 'fax', 'email', 'mobile', 'postal_code', 'address']
+                updated_fields = []
+                
+                for field in contact_fields:
+                    if not result.get(field) and merged_result.get(field):
+                        result[field] = merged_result[field]
+                        updated_fields.append(field)
+                
+                if updated_fields:
+                    print(f"  ✨ 업데이트된 필드: {', '.join(updated_fields)}")
+                    self.stats['contacts_found'] += 1
+                
+                extraction_summary['updated_fields'] = updated_fields
+                extraction_summary['homepage_status'] = 'completed'
+                self.stats['successful_crawls'] += 1
+                
+                print(f"  ✅ 처리 완료: {church_name}")
+                
+            except Exception as e:
+                print(f"  ❌ 처리 오류: {e}")
+                extraction_summary['homepage_status'] = 'error'
+                extraction_summary['error'] = str(e)
                 self.stats['failed_crawls'] += 1
-                result['extraction_summary'] = extraction_summary
-                return result
-            
-            # 2단계: BS4로 파싱
-            print(f"  📄 HTML 파싱 중...")
-            parsed_data = self.parse_with_bs4(html_content, homepage)
-            extraction_summary['homepage_status'] = 'parsed'
-            
-            # 3단계: parser.py로 기본 추출
-            print(f"  🔍 기본 연락처 추출 중...")
-            parser_result = self.extract_with_parser(parsed_data)
-            extraction_summary['parser_extracted'] = parser_result
-            
-            # 4단계: validator.py로 검증
-            print(f"  ✅ 연락처 검증 중...")
-            validator_result = self.validate_with_validator(parser_result)
-            extraction_summary['validator_result'] = validator_result
-            
-            # 5단계: AI로 추가 추출
-            ai_result = await self.enhance_with_ai(parsed_data, church_name)
-            extraction_summary['ai_enhanced'] = ai_result
-            
-            # 6단계: 결과 병합
-            print(f"  🔄 결과 병합 중...")
-            merged_result = self.merge_extraction_results(parser_result, validator_result, ai_result)
-            extraction_summary['final_merged'] = merged_result
-            
-            # 7단계: 기존 빈 값을 추출된 값으로 업데이트
-            contact_fields = ['phone', 'fax', 'email', 'mobile', 'postal_code', 'address']
-            updated_fields = []
-            
-            for field in contact_fields:
-                if not result.get(field) and merged_result.get(field):
-                    result[field] = merged_result[field]
-                    updated_fields.append(field)
-            
-            if updated_fields:
-                print(f"  ✨ 업데이트된 필드: {', '.join(updated_fields)}")
-                self.stats['contacts_found'] += 1
-            
-            extraction_summary['updated_fields'] = updated_fields
-            extraction_summary['homepage_status'] = 'completed'
-            self.stats['successful_crawls'] += 1
-            
-            print(f"  ✅ 처리 완료: {church_name}")
-            
-        except Exception as e:
-            print(f"  ❌ 처리 오류: {e}")
-            extraction_summary['homepage_status'] = 'error'
-            extraction_summary['error'] = str(e)
-            self.stats['failed_crawls'] += 1
-            self.logger.error(f"교회 처리 오류 ({church_name}): {e}")
+                self.logger.error(f"교회/기관/공부방  처리 오류 ({church_name}): {e}")
         
         result['extraction_summary'] = extraction_summary
         return result
     
     async def process_all_churches(self, churches_data: List[Dict]) -> List[Dict]:
-        """모든 교회 처리"""
-        print(f"\n🚀 총 {len(churches_data)}개 교회 처리 시작")
+        """모든 교회/기관/공부방  처리"""
+        print(f"\n🚀 총 {len(churches_data)}개 교회/기관/공부방  처리 시작")
         
         results = []
         
         for i, church in enumerate(churches_data):
             print(f"\n📍 진행상황: {i+1}/{len(churches_data)}")
             
-            # 교회 처리
+            # 교회/기관/공부방  처리
             result = await self.process_single_church(church)
             results.append(result)
             
@@ -725,7 +735,7 @@ class AdvancedChurchCrawler:
 async def main():
     """메인 실행 함수"""
     print("=" * 60)
-    print("🚀 고급 교회 연락처 크롤러 v2.0")
+    print("🚀 고급 교회/기관/공부방  연락처 크롤러 v2.0")
     print("=" * 60)
     
     # 환경변수 확인
@@ -764,18 +774,18 @@ async def main():
         return
     
     print(f"📂 입력 파일: {input_file}")
-    print(f"📊 처리할 교회 수: {len(churches_data)}")
+    print(f"📊 처리할 교회/기관/공부방  수: {len(churches_data)}")
     
     # 처리할 개수 제한 옵션 추가
-    max_process = input(f"처리할 교회 수 (전체: {len(churches_data)}개, 엔터=전체): ").strip()
+    max_process = input(f"처리할 교회/기관/공부방  수 (전체: {len(churches_data)}개, 엔터=전체): ").strip()
     
     if max_process and max_process.isdigit():
         max_process = int(max_process)
         churches_data = churches_data[:max_process]
-        print(f"📊 실제 처리할 교회 수: {len(churches_data)}")
+        print(f"📊 실제 처리할 교회/기관/공부방  수: {len(churches_data)}")
     
     # 사용자 확인
-    print(f"\n⚠️ {len(churches_data)}개 교회의 홈페이지를 크롤링합니다.")
+    print(f"\n⚠️ {len(churches_data)}개 교회/기관/공부방 의 홈페이지를 크롤링합니다.")
     print("이 작업은 시간이 오래 걸릴 수 있습니다.")
     
     proceed = input("계속 진행하시겠습니까? (y/N): ").strip().lower()
@@ -784,7 +794,7 @@ async def main():
         return
     
     try:
-        # 모든 교회 처리
+        # 모든 교회/기관/공부방  처리
         enhanced_results = await crawler.process_all_churches(churches_data)
         
         # 최종 결과 저장
