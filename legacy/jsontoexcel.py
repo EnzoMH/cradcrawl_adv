@@ -93,27 +93,34 @@ class ContactDataExtractor:
             print(f"❌ 파일 검색 중 오류: {e}")
             return ""
 
-    def find_latest_json_file(self) -> Optional[str]:
-        """가장 최근의 raw_data_with_homepages_*.json 파일 찾기"""
-        # 현재 디렉토리와 상위 디렉토리에서 검색
-        patterns = [
-            "raw_data_with_homepages_*.json",      # 현재 디렉토리
-            "../raw_data_with_homepages_*.json"    # 상위 디렉토리
-        ]
-        
-        all_files = []
-        for pattern in patterns:
-            files = glob.glob(pattern)
-            all_files.extend(files)
-        
-        if not all_files:
-            print("❌ raw_data_with_homepages_*.json 파일을 찾을 수 없습니다.")
-            return None
-        
-        # 파일명에서 날짜/시간 추출하여 가장 최근 파일 선택
-        latest_file = max(all_files, key=os.path.getctime)
-        print(f"📂 발견된 파일: {latest_file}")
-        return latest_file
+    def find_latest_json_file() -> str:
+        """가장 최근의 JSON 파일 찾기 (수정된 버전)"""
+        try:
+            # 현재 디렉토리에서 패턴 검색
+            patterns = [
+                "churches_enhanced_final_*.json",  # advcrawler.py 결과
+                "raw_data_with_homepages_*.json",  # url_extractor 결과  
+                "undefined_converted_*.json"       # 원본 데이터
+            ]
+            
+            all_files = []
+            for pattern in patterns:
+                files = glob.glob(pattern)
+                all_files.extend(files)
+            
+            if not all_files:
+                print("❌ JSON 파일을 찾을 수 없습니다.")
+                return ""
+            
+            # 파일 수정 시간 기준으로 최신 파일 선택
+            latest_file = max(all_files, key=os.path.getctime)
+            print(f"🔍 찾은 최신 파일: {latest_file}")
+            
+            return latest_file
+            
+        except Exception as e:
+            print(f"❌ 파일 검색 중 오류: {e}")
+            return ""
         
     def filter_news_content(self, text: str) -> bool:
         """news 키워드가 포함된 내용 필터링"""
@@ -518,8 +525,16 @@ def main():
     # ContactDataExtractor 인스턴스 생성
     extractor = ContactDataExtractor()
     
-    # 파일 경로 설정
-    json_file = r"C:\Users\kimyh\makedb\Python\cradcrawl_adv\churches_enhanced_final_20250610_144056.json"
+    # 최신 JSON 파일 자동 찾기 (하드코딩 제거)
+    try:
+        json_file = find_latest_json_file()
+        print(f"🔍 최신 JSON 파일 발견: {json_file}")
+    except FileNotFoundError as e:
+        print(f"❌ JSON 파일을 찾을 수 없습니다: {e}")
+        return
+    except Exception as e:
+        print(f"❌ 파일 검색 중 오류: {e}")
+        return
     
     # 타임스탬프 포함한 엑셀 파일명 생성
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -557,6 +572,3 @@ def main():
 
 if __name__ == "__main__":
     main()  # asyncio.run()은 이미 process_json_to_excel() 호출 시 사용됨
-
-if __name__ == "__main__":
-    asyncio.run(main()) 
