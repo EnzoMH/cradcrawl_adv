@@ -1,0 +1,1356 @@
+{
+  "churches": [
+    {
+      "name": "효성영광교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "흥광장로교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "김해활천교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "더푸른교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "동성감리교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "부여교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "빛교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "사랑의교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "사랑의동산교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "수정교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "여수평강교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "영암교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "참좋은교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "장대교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "하늘꿈연동교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "목행동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "광주양림교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "독산1동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "소망교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "갈월교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "갈현교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "강진읍교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "강화제일교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "개봉동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "개포동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "경천교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "계산교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "계산동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "과천중앙교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "광북성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "광주대교구비아동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "광주장지동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "광진교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "광탄교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "교하성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "금호동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "기장성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "꿈이있는교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "남문교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "대동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "대방동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "대성장로교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "대전대흥교회청소년부",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "대전서부교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "대천성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "덕명동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "동산교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "동춘동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "목포한사랑교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "발산동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "법동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "복대교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "부개동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "부평4동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "사랑제일교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "상봉동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "새광명교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "새성남교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "새싹교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "생명나무교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "성덕교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "성린교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "성산교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "소사본3동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "송면교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "송산새솔동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "송정중앙교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "수원중앙침례교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "순복음오삼능력교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "스피릿교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "신촌성결교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "암사성당 중고등 주일학교",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "앨리향교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "연수동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "영신교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "영일교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "예향교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "온양신정동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "요촌성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "우동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "원동교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "원주시온교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "원주중앙장로교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "위례비전교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "의정부낙양하나님의교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "이음동산교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "인헌동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "임마누엘교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "전주대신교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "전주신광교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "정읍연지동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "제자교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "종로세종로성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "주예수교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "주중좋은교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "창대교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "창성교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "천안중앙교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "천주교논현성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "철원평화교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "축동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "큰은혜교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "태봉교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "한신교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "함께하는우리교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "호원동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "홍제동성당부설방과후교실",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "화목교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "행복한교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "홍성교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "홍원침례교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "홍제동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "횡성부곡장로교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "효성중앙교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "후곡성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "후암동성당",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "흰돌교회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    }
+  ],
+  "taekwondo_centers": [
+    {
+      "name": "대호태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "무안군청소년수련관",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "아이사랑체육관",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "영암군청소년수련관",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "용인대서재태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "한국잡월드(제주청소년수련관)",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "한나무태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "아산드림태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "홍전군청소년수련관",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "경기체육관",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "경희대성원태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "고산국가대표태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "고촌국가대표태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "광수한체대태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "국가대표가온체육관",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "국가대표한결태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "군포시청소년수련관",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "나래태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "남서울명성태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "단국대백호태권도장",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "대만야구팀",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "대전현대태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "비젼태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "삼척시청소년수련관",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "서천군청소년수련관",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "석사경희대태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "성화체육관",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "수정청소년수련관",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "슈퍼키즈태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "신중태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "안양동안청소년수련관",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "안양시민안정청소년수련관",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "연세탑영어체육관",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "예산군청소년수련관",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "예산군청소년수련관 방과후아카데미",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "용인대아이언태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "용인대태성태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "위너스태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "장성군청소년수련관",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "정프스타태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "정체육관",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "중국 탁구단",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "청룡태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "청운태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "태무용호체육관",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "태사자태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "태풍태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "파주시청소년수련관",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "파주제이멀티짐",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "필승태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "한국태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "한양대탑수정태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "행복한태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "현대체육관",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "화랑태권도",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    }
+  ],
+  "youth_centers": [
+    {
+      "name": "화천푸르나지역아동센터",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "횡성지역아동센터",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "회망터지역아동센터",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "대구지역아동센터연합",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "더불어숲지역아동센터",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "도담지역아동센터",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "만복이네공부방지역아동센터",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "송파열매지역아동센터",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "시립서울청소년센터",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "어린이나라지역아동센터",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "완도군 가족센터",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "우리함께다문화지역아동센터",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "전남문화예술협회",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "제주가정위탁지원센터",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "진해회망의집",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "청소년차오름센터",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "한국생활체육양궁연맹",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "시립강북청소년센터",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "온사랑지역아동센터",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "철원교육지원청 교육복지센터",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "한물지역아동센터",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    }
+  ],
+  "educational_institutions": [
+    {
+      "name": "C&C미술학원",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "ciee하이스쿨",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "JP장현영어수학학원",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "경남중앙학원",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "곡성영재교육원",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "그레이스국제학교",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "그레이스학원",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "미래엔영어",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "정도학원",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "조셉학원",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "천안서여자중학교",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "합천영재교육원",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "화순영재교육원",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "문수진영어수학",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "은천조등학교",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "한국외국어학원",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "방원중두드림학교",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "부평고등학교",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "포천시 청소년 방과후 아카데미",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    }
+  ],
+  "other_organizations": [
+    {
+      "name": "광주광역시자립지원전담기관",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "김해답사진구",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "대교눈높이",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "더블유타임즈",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "롤링코리아",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "목포교육지원청",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "부산교육여행",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "안동시드림스타트",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "전라북도서울장학숙",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "퍼스트뉴스기자단(학생단체)",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "피오디커뮤니케이션즈",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    },
+    {
+      "name": "해남군교육재단",
+      "homepage": "",
+      "phone": "",
+      "fax": ""
+    }
+  ]
+} 
