@@ -202,7 +202,7 @@ def main():
     print("=" * 60)
     
     # 파일 경로 설정
-    json_file = "churches_enhanced_final_20250605_151046.json"
+    json_file = "churches_enhanced_final_20250611_182318.json"
     
     # 제외할 필드들 설정
     exclude_fields = ["homepage", "extraction_summary"]

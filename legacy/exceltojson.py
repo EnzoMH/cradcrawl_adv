@@ -154,12 +154,12 @@ def main():
     메인 실행 함수
     """
     # 파일 경로 설정
-    excel_file_path = r"C:\Users\kimyh\makedb\Python\cradcrawl_adv\undefined.xlsx"
+    excel_file_path = r"C:\Users\kimyh\makedb\Python\cradcrawl_adv\church_data_filtered_20250612_132254.xlsx"
     output_dir = r"C:\Users\kimyh\makedb\Python\cradcrawl_adv"
     
     # 출력 파일명 생성 (타임스탬프 포함)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file_name = f"undefined_converted_{timestamp}.json"
+    output_file_name = f"church_data_converted_{timestamp}.json"
     output_file_path = os.path.join(output_dir, output_file_name)
     
     print("=" * 60)
@@ -183,12 +183,6 @@ def main():
     # Excel 구조 미리보기
     preview_excel_structure(excel_file_path)
     
-    # 사용자 확인 (자동 실행을 위해 주석 처리)
-    # user_input = input("\n변환을 계속하시겠습니까? (y/n): ").lower().strip()
-    # if user_input not in ['y', 'yes', '']:
-    #     print("변환이 취소되었습니다.")
-    #     return
-    
     print("\n🚀 변환을 시작합니다...")
     
     # 변환 실행
@@ -206,7 +200,7 @@ def main():
         print("  raw_data_0530.json과 동일한 구조로 변환되었습니다.")
         
     else:
-        print("\n❌ 변환 중 오류가 발생했습니다.")
+        print("\n❌변환 중 오류가 발생했습니다.")
         print("  Excel 파일의 구조를 확인하고 다시 시도해주세요.")
 
 if __name__ == "__main__":
