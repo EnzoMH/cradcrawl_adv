@@ -2,13 +2,13 @@
 # *.json
 
 # Excel files
-*.xlsx
+# *.xlsx
 
 # Environment files
 *.env
 
 # CSV files
-*.csv
+# *.csv
 
 # Log files
 *.log

@@ -1,574 +1,247 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-JSON to Excel 변환기 (Gemini AI 검증 포함)
-홈페이지 크롤링 결과 JSON 파일을 Excel 파일로 변환하는 스크립트
-"""
-
 import json
-import os
-import sys
-import glob
-import re
-import asyncio
+import pandas as pd
 from datetime import datetime
-from typing import Dict, List, Any, Optional
-import traceback
+import os
 
-# 상위 디렉토리를 Python path에 추가 (ai_helpers 모듈 접근용)
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
+def load_and_analyze_json(json_file_path):
+    """JSON 파일 로드 및 기본 분석"""
+    try:
+        print(f"📂 JSON 파일 로딩 중: {json_file_path}")
+        
+        with open(json_file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        print(f"✅ JSON 파일 로드 완료")
+        print(f"📊 데이터 타입: {type(data)}")
+        
+        if isinstance(data, list):
+            print(f"📋 총 레코드 수: {len(data)}")
+            if len(data) > 0:
+                print(f"🔍 첫 번째 레코드 키들: {list(data[0].keys())}")
+                print(f"📝 첫 번째 레코드 예시:")
+                for key, value in list(data[0].items())[:5]:  # 처음 5개 필드만 출력
+                    print(f"  - {key}: {value}")
+        elif isinstance(data, dict):
+            print(f"📋 최상위 키들: {list(data.keys())}")
+            
+        return data
+        
+    except FileNotFoundError:
+        print(f"❌ 파일을 찾을 수 없습니다: {json_file_path}")
+        return None
+    except json.JSONDecodeError as e:
+        print(f"❌ JSON 파싱 오류: {e}")
+        return None
+    except Exception as e:
+        print(f"❌ 파일 로딩 중 오류: {e}")
+        return None
 
-# Excel 관련 import
-from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Font, PatternFill, Alignment
-from openpyxl.utils import get_column_letter
+def filter_excluded_fields(data, exclude_fields):
+    """지정된 필드들을 제외한 데이터 반환"""
+    if isinstance(data, list):
+        filtered_data = []
+        for record in data:
+            if isinstance(record, dict):
+                filtered_record = {k: v for k, v in record.items() if k not in exclude_fields}
+                filtered_data.append(filtered_record)
+            else:
+                filtered_data.append(record)
+        return filtered_data
+    elif isinstance(data, dict):
+        return {k: v for k, v in data.items() if k not in exclude_fields}
+    return data
 
-# 환경변수 로드
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-    print("✅ .env 파일 로드 완료")
-except ImportError:
-    print("⚠️ python-dotenv 모듈이 없습니다. 환경변수를 직접 설정해주세요.")
-
-# AI 도우미 모듈 import (선택적)
-try:
-    from ai_helpers import AIManager
-    print("✅ ai_helpers 모듈 로드 완료")
-    AI_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ ai_helpers 모듈이 없어 AI 검증 기능 비활성화: {e}")
-    AIManager = None
-    AI_AVAILABLE = False
-
-class ContactDataExtractor:
-    """연락처 데이터 추출 및 검증 클래스"""
+def analyze_data_structure(data, exclude_fields=None):
+    """데이터 구조 상세 분석 (제외 필드 고려)"""
+    print("\n🔍 데이터 구조 분석 중...")
     
-    def __init__(self):
-        """초기화"""
-        self.ai_manager = None
-        
-        # .env에서 API 키 확인
-        api_key = os.getenv('GEMINI_API_KEY')
-        
-        if AI_AVAILABLE and api_key:
-            try:
-                # AIModelManager에 API 키 전달 (필요시)
-                self.ai_manager = AIManager()
-                print("🤖 AI 모델 초기화 완료 (.env에서 API 키 로드)")
-            except Exception as e:
-                print(f"⚠️ AI 모델 초기화 실패: {e}")
-                self.ai_manager = None
-        elif AI_AVAILABLE and not api_key:
-            print("⚠️ .env에서 GEMINI_API_KEY를 찾을 수 없습니다. AI 검증 기능 비활성화")
-        else:
-            print("⚠️ ai_helpers 모듈이 없어 AI 검증 기능 비활성화")
+    if exclude_fields:
+        print(f"🚫 제외할 필드들: {', '.join(exclude_fields)}")
     
-    def find_latest_enhanced_file() -> str:
-        """가장 최근의 churches_enhanced_final_*.json 파일 찾기"""
-        try:
-            # churches_enhanced_final_*.json 패턴으로 파일 찾기
-            pattern = "churches_enhanced_final_*.json"
-            files = glob.glob(pattern)
-            
-            if not files:
-                print(f"❌ {pattern} 패턴의 파일을 찾을 수 없습니다.")
-                return ""
-            
-            # 가장 최근 파일 선택 (파일 생성 시간 기준)
-            latest_file = max(files, key=os.path.getctime)
-            
-            print(f"🔍 발견된 파일들:")
-            for file in sorted(files, key=os.path.getctime, reverse=True):
-                marker = " ← 선택됨" if file == latest_file else ""
-                creation_time = datetime.fromtimestamp(os.path.getctime(file)).strftime("%Y-%m-%d %H:%M:%S")
-                print(f"  📄 {file} (생성: {creation_time}){marker}")
-            
-            return latest_file
-            
-        except Exception as e:
-            print(f"❌ 파일 검색 중 오류: {e}")
-            return ""
-
-    def find_latest_json_file() -> str:
-        """가장 최근의 JSON 파일 찾기 (수정된 버전)"""
-        try:
-            # 현재 디렉토리에서 패턴 검색
-            patterns = [
-                "churches_enhanced_final_*.json",  # advcrawler.py 결과
-                "raw_data_with_homepages_*.json",  # url_extractor 결과  
-                "undefined_converted_*.json"       # 원본 데이터
-            ]
-            
-            all_files = []
-            for pattern in patterns:
-                files = glob.glob(pattern)
-                all_files.extend(files)
-            
-            if not all_files:
-                print("❌ JSON 파일을 찾을 수 없습니다.")
-                return ""
-            
-            # 파일 수정 시간 기준으로 최신 파일 선택
-            latest_file = max(all_files, key=os.path.getctime)
-            print(f"🔍 찾은 최신 파일: {latest_file}")
-            
-            return latest_file
-            
-        except Exception as e:
-            print(f"❌ 파일 검색 중 오류: {e}")
-            return ""
+    if isinstance(data, list) and len(data) > 0:
+        # 모든 키들 수집
+        all_keys = set()
+        sample_records = data[:min(10, len(data))]  # 처음 10개 레코드 분석
         
-    def filter_news_content(self, text: str) -> bool:
-        """news 키워드가 포함된 내용 필터링"""
-        if not text:
-            return False
+        for record in sample_records:
+            if isinstance(record, dict):
+                all_keys.update(record.keys())
         
-        # news 관련 키워드 체크 (대소문자 무관)
-        news_keywords = ['news', 'newsletter', 'newsroom', 'press', 'media']
-        text_lower = text.lower()
+        # 제외 필드 제거
+        if exclude_fields:
+            all_keys = all_keys - set(exclude_fields)
         
-        for keyword in news_keywords:
-            if keyword in text_lower:
-                return True
-        return False
-    
-    def extract_contact_info(self, org_data: Dict[str, Any]) -> Dict[str, str]:
-        """기관 데이터에서 연락처 정보 추출"""
-        result = {
-            "기관명": org_data.get("name", ""),
-            "전화번호": "",
-            "fax번호": "",
-            "이메일": "",
-            "url": org_data.get("homepage", "")
-        }
+        print(f"📋 포함될 필드들 ({len(all_keys)}개):")
+        for key in sorted(all_keys):
+            print(f"  - {key}")
         
-        # 기본 필드에서 추출
-        if org_data.get("phone"):
-            result["전화번호"] = org_data["phone"]
-        if org_data.get("fax"):
-            result["fax번호"] = org_data["fax"]
+        # 필드별 데이터 현황 분석
+        print(f"\n📊 필드별 데이터 현황 (상위 {len(sample_records)}개 레코드 기준):")
+        field_stats = {}
         
-        # 홈페이지 파싱 결과에서 추출
-        homepage_content = org_data.get("homepage_content", {})
-        if homepage_content:
-            parsed_contact = homepage_content.get("parsed_contact", {})
+        for key in sorted(all_keys):
+            non_empty_count = 0
+            for record in sample_records:
+                if record.get(key) and str(record.get(key)).strip():
+                    non_empty_count += 1
             
-            # 전화번호 추출 (파싱된 결과 우선)
-            if parsed_contact.get("phones") and not result["전화번호"]:
-                phones = [phone for phone in parsed_contact["phones"] if not self.filter_news_content(phone)]
-                if phones:
-                    result["전화번호"] = ", ".join(phones)
-            
-            # 팩스번호 추출 (파싱된 결과 우선)
-            if parsed_contact.get("faxes") and not result["fax번호"]:
-                faxes = [fax for fax in parsed_contact["faxes"] if not self.filter_news_content(fax)]
-                if faxes:
-                    result["fax번호"] = ", ".join(faxes)
-            
-            # 이메일 추출 (news 필터링)
-            if parsed_contact.get("emails"):
-                emails = [email for email in parsed_contact["emails"] if not self.filter_news_content(email)]
-                if emails:
-                    result["이메일"] = ", ".join(emails)
-        
-        # URL news 필터링
-        if result["url"] and self.filter_news_content(result["url"]):
-            result["url"] = ""
-        
-        return result
-    
-    def validate_contact_consistency(self, org_data: Dict[str, Any], extracted_data: Dict[str, str]) -> Dict[str, Any]:
-        """contact_info와 parsed_contact 데이터 일치성 검증"""
-        validation_result = {
-            "is_consistent": True,
-            "issues": [],
-            "confidence_score": 1.0
-        }
-        
-        homepage_content = org_data.get("homepage_content", {})
-        contact_info = homepage_content.get("contact_info", "")
-        parsed_contact = homepage_content.get("parsed_contact", {})
-        
-        if not contact_info and not parsed_contact:
-            validation_result["issues"].append("연락처 정보 없음")
-            validation_result["confidence_score"] = 0.0
-            return validation_result
-        
-        # 기본 일치성 검증
-        issues = []
-        
-        # 전화번호 검증
-        if extracted_data["전화번호"]:
-            if contact_info and extracted_data["전화번호"] not in contact_info:
-                issues.append(f"전화번호 불일치: {extracted_data['전화번호']}")
-        
-        # 팩스번호 검증
-        if extracted_data["fax번호"]:
-            if contact_info and extracted_data["fax번호"] not in contact_info:
-                issues.append(f"팩스번호 불일치: {extracted_data['fax번호']}")
-        
-        # 이메일 검증
-        if extracted_data["이메일"]:
-            if contact_info and extracted_data["이메일"] not in contact_info:
-                issues.append(f"이메일 불일치: {extracted_data['이메일']}")
-        
-        if issues:
-            validation_result["is_consistent"] = False
-            validation_result["issues"] = issues
-            validation_result["confidence_score"] = max(0.1, 1.0 - len(issues) * 0.3)
-        
-        return validation_result
-    
-    async def ai_validate_contact_data(self, org_data: Dict[str, Any], extracted_data: Dict[str, str]) -> Dict[str, Any]:
-        """Gemini AI를 사용한 연락처 데이터 검증"""
-        if not self.ai_manager:
-            return {"ai_validation": "AI 검증 불가능"}
-        
-        try:
-            homepage_content = org_data.get("homepage_content", {})
-            contact_info = homepage_content.get("contact_info", "")
-            parsed_contact = homepage_content.get("parsed_contact", {})
-            
-            # AI 검증용 프롬프트 구성
-            prompt_template = """
-연락처 정보 검증 전문가로서, 다음 데이터의 일치성을 검증해주세요.
-
-**기관명**: {org_name}
-
-**원본 연락처 정보 (contact_info)**:
-{contact_info}
-
-**파싱된 연락처 정보 (parsed_contact)**:
-- 전화번호: {phones}
-- 팩스번호: {faxes}
-- 이메일: {emails}
-
-**추출된 최종 데이터**:
-- 전화번호: {final_phone}
-- 팩스번호: {final_fax}
-- 이메일: {final_email}
-
-다음 사항을 검증해주세요:
-1. 원본 정보와 파싱된 정보의 일치성
-2. 추출된 최종 데이터의 정확성
-3. 누락되거나 잘못된 정보가 있는지
-4. news 관련 이메일/연락처가 제대로 필터링되었는지
-
-검증 결과를 다음 형식으로 답변해주세요:
-- **일치성 점수**: (0-100점)
-- **주요 문제점**: (있다면 나열)
-- **권장 수정사항**: (있다면 제안)
-- **신뢰도**: (높음/보통/낮음)
-
-{text_content}
-"""
-            
-            # 프롬프트 데이터 구성
-            prompt_data = prompt_template.format(
-                org_name=extracted_data["기관명"],
-                contact_info=contact_info or "정보 없음",
-                phones=", ".join(parsed_contact.get("phones", [])) or "없음",
-                faxes=", ".join(parsed_contact.get("faxes", [])) or "없음", 
-                emails=", ".join(parsed_contact.get("emails", [])) or "없음",
-                final_phone=extracted_data["전화번호"] or "없음",
-                final_fax=extracted_data["fax번호"] or "없음",
-                final_email=extracted_data["이메일"] or "없음",
-                text_content=""
-            )
-            
-            # AI 검증 실행
-            ai_response = await self.ai_manager.extract_with_gemini(
-                text_content="",  # 이미 프롬프트에 포함됨
-                prompt_template=prompt_data
-            )
-            
-            # 마크다운 응답 파싱
-            parsed_response = self.parse_markdown_response(ai_response)
-            
-            return {
-                "ai_validation": "완료",
-                "ai_response": ai_response,
-                "parsed_validation": parsed_response
+            field_stats[key] = {
+                'non_empty': non_empty_count,
+                'empty': len(sample_records) - non_empty_count,
+                'fill_rate': (non_empty_count / len(sample_records)) * 100
             }
             
-        except Exception as e:
-            print(f"⚠️ AI 검증 중 오류: {e}")
-            return {"ai_validation": f"오류: {str(e)}"}
+            print(f"  📌 {key}: {non_empty_count}/{len(sample_records)} 채워짐 ({field_stats[key]['fill_rate']:.1f}%)")
+        
+        return all_keys, field_stats
     
-    def parse_markdown_response(self, markdown_text: str) -> Dict[str, str]:
-        """마크다운 형식의 AI 응답 파싱"""
-        if not markdown_text:
-            return {}
+    return None, None
+
+def convert_to_excel(data, excel_file_path, exclude_fields=None, all_keys=None):
+    """JSON 데이터를 엑셀로 변환 (특정 필드 제외)"""
+    try:
+        print(f"\n💾 엑셀 파일 생성 중: {excel_file_path}")
         
-        parsed = {}
+        # 제외 필드 적용
+        if exclude_fields:
+            print(f"🚫 제외되는 필드들: {', '.join(exclude_fields)}")
+            data = filter_excluded_fields(data, exclude_fields)
         
-        # 일치성 점수 추출
-        score_match = re.search(r'일치성 점수.*?(\d+)', markdown_text)
-        if score_match:
-            parsed["consistency_score"] = score_match.group(1)
-        
-        # 주요 문제점 추출
-        problems_match = re.search(r'주요 문제점.*?:(.*?)(?=\*\*|$)', markdown_text, re.DOTALL)
-        if problems_match:
-            parsed["problems"] = problems_match.group(1).strip()
-        
-        # 권장 수정사항 추출
-        recommendations_match = re.search(r'권장 수정사항.*?:(.*?)(?=\*\*|$)', markdown_text, re.DOTALL)
-        if recommendations_match:
-            parsed["recommendations"] = recommendations_match.group(1).strip()
-        
-        # 신뢰도 추출
-        reliability_match = re.search(r'신뢰도.*?:(.*?)(?=\*\*|$)', markdown_text)
-        if reliability_match:
-            parsed["reliability"] = reliability_match.group(1).strip()
-        
-        return parsed
-    
-    def chunk_json_data(self, data: List[Dict], chunk_size: int = 50) -> List[List[Dict]]:
-        """JSON 데이터를 청크 단위로 분할 (context limit 대응)"""
-        chunks = []
-        
-        # 리스트를 chunk_size 단위로 분할
-        for i in range(0, len(data), chunk_size):
-            chunk = data[i:i + chunk_size]
-            chunks.append(chunk)
-        
-        print(f"📦 데이터를 {len(chunks)}개 청크로 분할 (청크당 최대 {chunk_size}개 기관)")
-        return chunks
-    
-    async def process_json_to_excel(self, json_file_path: str, excel_file_path: str, use_ai_validation: bool = True) -> bool:
-        """JSON 파일을 Excel 파일로 변환 (AI 검증 포함)"""
-        print(f"🔄 JSON to Excel 변환 시작...")
-        print(f"📂 입력 파일: {json_file_path}")
-        print(f"💾 출력 파일: {excel_file_path}")
-        print(f"🤖 AI 검증: {'활성화' if use_ai_validation and self.ai_manager else '비활성화'}")
-        
-        try:
-            # JSON 파일 로드
-            with open(json_file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+        if isinstance(data, list):
+            # 리스트 형태의 데이터를 DataFrame으로 변환
+            df = pd.DataFrame(data)
             
-            print(f"✅ JSON 파일 로드 완료: {len(data)}개 기관")
+            # 컬럼 순서 조정 (중요한 필드들을 앞으로) - 제외 필드는 제거
+            priority_columns = ['name', 'category', 'phone', 'fax', 'email', 'address', 'postal_code', 'mobile']
             
-            # Excel 워크북 생성
-            wb = Workbook()
-            ws = wb.active
-            ws.title = "연락처 데이터"
+            # 제외 필드가 있으면 우선순위에서도 제거
+            if exclude_fields:
+                priority_columns = [col for col in priority_columns if col not in exclude_fields]
             
-            # 헤더 설정
-            headers = ["기관명", "전화번호", "fax번호", "이메일", "url"]
-            if use_ai_validation and self.ai_manager:
-                headers.extend(["일치성검증", "AI검증점수", "신뢰도", "문제점"])
+            # 존재하는 우선순위 컬럼들만 필터링
+            existing_priority = [col for col in priority_columns if col in df.columns]
+            remaining_columns = [col for col in df.columns if col not in existing_priority]
             
-            # 헤더 스타일 설정
-            header_font = Font(bold=True, color="FFFFFF")
-            header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
-            header_alignment = Alignment(horizontal="center", vertical="center")
+            # 컬럼 순서 재정렬
+            new_column_order = existing_priority + remaining_columns
+            df = df[new_column_order]
             
-            for col, header in enumerate(headers, 1):
-                cell = ws.cell(row=1, column=col, value=header)
-                cell.font = header_font
-                cell.fill = header_fill
-                cell.alignment = header_alignment
+            print(f"📋 DataFrame 생성 완료: {len(df)} 행, {len(df.columns)} 열")
+            print(f"📊 포함된 컬럼 목록: {list(df.columns)}")
             
-            # 데이터 처리
-            row_num = 2
-            total_count = 0
-            ai_validation_count = 0
-            
-            # 청크 단위로 처리 (메모리 효율성)
-            chunks = self.chunk_json_data(data, chunk_size=50)
-            
-            for chunk_idx, chunk in enumerate(chunks):
-                print(f"📦 청크 {chunk_idx + 1}/{len(chunks)} 처리 중...")
-                
-                for org in chunk:
-                    # 기본 연락처 정보 추출
-                    contact_info = self.extract_contact_info(org)
-                    
-                    # 기본 일치성 검증
-                    validation_result = self.validate_contact_consistency(org, contact_info)
-                    
-                    # Excel 행에 기본 데이터 입력
-                    ws.cell(row=row_num, column=1, value=contact_info["기관명"])
-                    ws.cell(row=row_num, column=2, value=contact_info["전화번호"])
-                    ws.cell(row=row_num, column=3, value=contact_info["fax번호"])
-                    ws.cell(row=row_num, column=4, value=contact_info["이메일"])
-                    ws.cell(row=row_num, column=5, value=contact_info["url"])
-                    
-                    # AI 검증 (선택적)
-                    if use_ai_validation and self.ai_manager and not validation_result["is_consistent"]:
-                        try:
-                            ai_result = await self.ai_validate_contact_data(org, contact_info)
-                            parsed_ai = ai_result.get("parsed_validation", {})
-                            
-                            ws.cell(row=row_num, column=6, value="AI검증완료" if ai_result.get("ai_validation") == "완료" else "검증실패")
-                            ws.cell(row=row_num, column=7, value=parsed_ai.get("consistency_score", ""))
-                            ws.cell(row=row_num, column=8, value=parsed_ai.get("reliability", ""))
-                            ws.cell(row=row_num, column=9, value=parsed_ai.get("problems", ""))
-                            
-                            ai_validation_count += 1
-                            
-                        except Exception as ai_err:
-                            print(f"⚠️ AI 검증 오류 ({contact_info['기관명']}): {ai_err}")
-                            ws.cell(row=row_num, column=6, value="AI검증오류")
-                    
-                    elif use_ai_validation and self.ai_manager:
-                        ws.cell(row=row_num, column=6, value="검증통과")
-                        ws.cell(row=row_num, column=7, value="100")
-                        ws.cell(row=row_num, column=8, value="높음")
-                    
-                    row_num += 1
-                    total_count += 1
-                    
-                    # 진행 상황 표시 (50개마다)
-                    if total_count % 50 == 0:
-                        print(f"   📝 {total_count}개 기관 처리 완료...")
-            
-            # 열 너비 자동 조정
-            for col in range(1, len(headers) + 1):
-                column_letter = get_column_letter(col)
-                ws.column_dimensions[column_letter].width = 20
-            
-            # Excel 파일 저장
-            wb.save(excel_file_path)
-            
-            print(f"🎉 Excel 변환 완료!")
-            print(f"📊 총 {total_count}개 기관 데이터 변환됨")
-            if use_ai_validation and self.ai_manager:
-                print(f"🤖 AI 검증 수행: {ai_validation_count}개 기관")
-            print(f"💾 저장 위치: {excel_file_path}")
-            
-            return True
-            
-        except Exception as e:
-            print(f"❌ 변환 중 오류 발생: {e}")
-            print(f"🔍 상세 오류: {traceback.format_exc()}")
+        elif isinstance(data, dict):
+            # 딕셔너리 형태의 데이터를 처리
+            if 'churches' in data:
+                churches_data = data['churches']
+                if exclude_fields:
+                    churches_data = filter_excluded_fields(churches_data, exclude_fields)
+                df = pd.DataFrame(churches_data)
+            else:
+                # 딕셔너리를 하나의 행으로 변환
+                df = pd.DataFrame([data])
+        else:
+            print("❌ 지원하지 않는 데이터 형태입니다.")
             return False
-    
-    def preview_excel_data(self, excel_file_path: str, num_rows: int = 5):
-        """Excel 파일 미리보기"""
-        print(f"\n📋 Excel 파일 미리보기 (상위 {num_rows}개 행):")
-        print("=" * 100)
         
-        try:
-            wb = load_workbook(excel_file_path)
-            ws = wb.active
+        # 엑셀 파일로 저장
+        with pd.ExcelWriter(excel_file_path, engine='openpyxl') as writer:
+            # 메인 데이터 시트
+            df.to_excel(writer, sheet_name='교회_데이터', index=False)
             
-            # 헤더 출력
-            headers = [cell.value for cell in ws[1]]
-            header_line = " | ".join([f"{str(header)[:15]:15}" for header in headers])
-            print(header_line)
-            print("-" * len(header_line))
-            
-            # 데이터 행 출력
-            for row_idx in range(2, min(num_rows + 2, ws.max_row + 1)):
-                row_data = [cell.value for cell in ws[row_idx]]
-                row_line = " | ".join([f"{str(data)[:15] if data else '':15}" for data in row_data])
-                print(row_line)
-            
-            print("=" * 100)
-            
-        except Exception as e:
-            print(f"❌ 미리보기 중 오류: {e}")
-    
-    def count_excel_statistics(self, excel_file_path: str):
-        """Excel 데이터 통계 출력"""
-        print(f"\n📊 데이터 통계:")
-        print("=" * 50)
-        
-        try:
-            wb = load_workbook(excel_file_path)
-            ws = wb.active
-            
-            total_count = ws.max_row - 1  # 헤더 제외
-            phone_count = 0
-            email_count = 0
-            fax_count = 0
-            url_count = 0
-            
-            for row_idx in range(2, ws.max_row + 1):
-                phone = ws.cell(row=row_idx, column=2).value
-                fax = ws.cell(row=row_idx, column=3).value
-                email = ws.cell(row=row_idx, column=4).value
-                url = ws.cell(row=row_idx, column=5).value
+            # 통계 시트 생성
+            stats_data = []
+            for column in df.columns:
+                non_null_count = df[column].notna().sum()
+                non_empty_count = df[column].astype(str).str.strip().ne('').sum()
                 
-                if phone and str(phone).strip():
-                    phone_count += 1
-                if fax and str(fax).strip():
-                    fax_count += 1
-                if email and str(email).strip():
-                    email_count += 1
-                if url and str(url).strip():
-                    url_count += 1
+                stats_data.append({
+                    '필드명': column,
+                    '전체_레코드수': len(df),
+                    '비어있지않은_레코드수': non_empty_count,
+                    '채움률_퍼센트': round((non_empty_count / len(df)) * 100, 1),
+                    '샘플_데이터': str(df[column].dropna().iloc[0] if not df[column].dropna().empty else '')[:50]
+                })
             
-            print(f"📈 총 기관 수: {total_count}")
-            print(f"📞 전화번호 보유: {phone_count}개 ({phone_count/total_count*100:.1f}%)")
-            print(f"📠 팩스번호 보유: {fax_count}개 ({fax_count/total_count*100:.1f}%)")
-            print(f"📧 이메일 보유: {email_count}개 ({email_count/total_count*100:.1f}%)")
-            print(f"🌐 URL 보유: {url_count}개 ({url_count/total_count*100:.1f}%)")
-            print("=" * 50)
-            
-        except Exception as e:
-            print(f"❌ 통계 계산 중 오류: {e}")
+            stats_df = pd.DataFrame(stats_data)
+            stats_df.to_excel(writer, sheet_name='필드_통계', index=False)
+        
+        print(f"✅ 엑셀 파일 생성 완료: {excel_file_path}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ 엑셀 변환 중 오류: {e}")
+        return False
+
+def preview_excel_file(excel_file_path, num_rows=5):
+    """엑셀 파일 미리보기"""
+    try:
+        print(f"\n👀 엑셀 파일 미리보기: {excel_file_path}")
+        
+        # 교회 데이터 시트 읽기
+        df = pd.read_excel(excel_file_path, sheet_name='교회_데이터')
+        
+        print(f"📊 전체 데이터 크기: {len(df)} 행, {len(df.columns)} 열")
+        print(f"📋 상위 {num_rows}개 레코드:")
+        print(df.head(num_rows).to_string())
+        
+        # 필드 통계 시트 읽기
+        try:
+            stats_df = pd.read_excel(excel_file_path, sheet_name='필드_통계')
+            print(f"\n📈 필드별 통계 (상위 10개):")
+            print(stats_df.head(10).to_string(index=False))
+        except:
+            print("📈 통계 시트를 읽을 수 없습니다.")
+        
+    except Exception as e:
+        print(f"❌ 엑셀 미리보기 중 오류: {e}")
 
 def main():
     """메인 실행 함수"""
     print("=" * 60)
-    print("📊 JSON to Excel 변환기 (고급 크롤링 결과용)")
+    print("📊 JSON to Excel 변환기 (필드 제외 기능)")
     print("=" * 60)
     
-    # ContactDataExtractor 인스턴스 생성
-    extractor = ContactDataExtractor()
+    # 파일 경로 설정
+    json_file = "churches_enhanced_final_20250611_182318.json"
     
-    # 최신 JSON 파일 자동 찾기 (하드코딩 제거)
-    try:
-        json_file = find_latest_json_file()
-        print(f"🔍 최신 JSON 파일 발견: {json_file}")
-    except FileNotFoundError as e:
-        print(f"❌ JSON 파일을 찾을 수 없습니다: {e}")
-        return
-    except Exception as e:
-        print(f"❌ 파일 검색 중 오류: {e}")
-        return
+    # 제외할 필드들 설정
+    exclude_fields = ["homepage", "extraction_summary"]
     
     # 타임스탬프 포함한 엑셀 파일명 생성
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    excel_file = f"church_data_enhanced_{timestamp}.xlsx"
+    excel_file = f"church_data_filtered_{timestamp}.xlsx"
     
     print(f"📂 입력 파일: {json_file}")
     print(f"💾 출력 파일: {excel_file}")
+    print(f"🚫 제외할 필드: {', '.join(exclude_fields)}")
     
     # 파일 존재 확인
     if not os.path.exists(json_file):
         print(f"❌ 입력 파일을 찾을 수 없습니다: {json_file}")
         return
     
-    # JSON to Excel 변환 실행
-    success = asyncio.run(extractor.process_json_to_excel(json_file, excel_file, use_ai_validation=False))
+    # 1단계: JSON 파일 로드 및 기본 분석
+    data = load_and_analyze_json(json_file)
+    if data is None:
+        return
+    
+    # 2단계: 데이터 구조 상세 분석 (제외 필드 고려)
+    all_keys, field_stats = analyze_data_structure(data, exclude_fields)
+    
+    # 3단계: 엑셀로 변환 (제외 필드 적용)
+    success = convert_to_excel(data, excel_file, exclude_fields, all_keys)
     
     if success:
+        # 4단계: 결과 미리보기
+        preview_excel_file(excel_file, num_rows=3)
+        
         print(f"\n🎉 변환 완료!")
         print(f"📁 생성된 파일: {excel_file}")
-        
-        # 결과 미리보기
-        extractor.preview_excel_data(excel_file, num_rows=3)
-        
-        # 통계 출력
-        extractor.count_excel_statistics(excel_file)
-        
-        # 파일 크기 정보
-        try:
-            file_size = os.path.getsize(excel_file) / (1024 * 1024)  # MB 단위
-            print(f"📏 파일 크기: {file_size:.2f} MB")
-        except:
-            pass
+        print(f"📊 데이터 시트: '교회_데이터'")
+        print(f"📈 통계 시트: '필드_통계'")
+        print(f"🚫 제외된 필드: {', '.join(exclude_fields)}")
     else:
         print("❌ 변환 실패")
 
 if __name__ == "__main__":
-    main()  # asyncio.run()은 이미 process_json_to_excel() 호출 시 사용됨
+    main()
