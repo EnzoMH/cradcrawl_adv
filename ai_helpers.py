@@ -12,7 +12,7 @@ import logging
 import traceback
 from typing import Dict, Any, Optional, Union, List
 import google.generativeai as genai
-from constants import AI_MODEL_CONFIG  # AI_MODEL_CONFIG만 import
+from config import AI_MODEL_CONFIG  # AI_MODEL_CONFIG만 import
 from utils.logger_utils import LoggerUtils
 
 import ssl

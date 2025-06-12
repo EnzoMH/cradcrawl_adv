@@ -25,9 +25,9 @@ load_dotenv()
 print(f"🔑 .env 로드 완료: GEMINI_API_KEY={'설정됨' if os.getenv('GEMINI_API_KEY') else '없음'}")
 
 # ✅ 수정: enhanced_detail_extractor 사용
-from enhanced_detail_extractor import EnhancedDetailExtractor
-
+from crawler_main import CrawlerMain
 # 통계 분석은 기존 사용
+
 from legacy.data_statistics import DataStatisticsAnalyzer
 
 # ✅ 수정: 유틸리티 활용
@@ -208,7 +208,7 @@ async def start_enhanced_crawling(config: CrawlingConfig):
         # 🔧 수정: Enhanced Detail Extractor 인스턴스 생성 (콜백 포함)
         logger.info("Enhanced Detail Extractor 인스턴스 생성")
         api_key = os.getenv('GEMINI_API_KEY') if config.use_ai else None
-        extractor_instance = EnhancedDetailExtractor(
+        extractor_instance = CrawlerMain(
             api_key=api_key, 
             progress_callback=progress_callback  # 🆕 추가: 콜백 함수 전달
         )
