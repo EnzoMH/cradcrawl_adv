@@ -12,8 +12,8 @@ from urllib.parse import urljoin, urlparse
 import requests
 import urllib3
 
-# constants.py에서 상수들 임포트 (추가)
-from constants import (
+# settings.py에서 상수들 임포트 (수정)
+from settings import (
     PHONE_EXTRACTION_PATTERNS,
     FAX_EXTRACTION_PATTERNS,
     EMAIL_EXTRACTION_PATTERNS,
@@ -32,12 +32,12 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class WebPageParser:
     def __init__(self):
-        self.logger = logging.getLogger(LOGGER_NAMES["parser"])  # 수정: constants에서 로거 이름 사용
+        self.logger = logging.getLogger(LOGGER_NAMES["parser"])
         
-        # constants.py에서 가져온 패턴들 사용 (수정)
+        # settings.py에서 가져온 패턴들 사용
         self.phone_patterns = PHONE_EXTRACTION_PATTERNS
         self.fax_patterns = FAX_EXTRACTION_PATTERNS
-        self.email_patterns = EMAIL_EXTRACTION_PATTERNS  # 수정: 리스트로 변경
+        self.email_patterns = EMAIL_EXTRACTION_PATTERNS
         self.address_patterns = ADDRESS_EXTRACTION_PATTERNS
         self.website_patterns = WEBSITE_EXTRACTION_PATTERNS
         
@@ -73,7 +73,7 @@ class WebPageParser:
                     if formatted_fax and formatted_fax not in contact_info["faxes"]:
                         contact_info["faxes"].append(formatted_fax)
             
-            # 이메일 추출 (수정: 리스트로 변경)
+            # 이메일 추출
             for pattern in self.email_patterns:
                 email_matches = re.findall(pattern, text, re.IGNORECASE)
                 for email in email_matches:
@@ -103,7 +103,7 @@ class WebPageParser:
     
     # 전화번호 포맷팅
     def format_phone_number(self, number_str):
-        """전화번호 포맷팅 (constants.py 함수 활용)"""
+        """전화번호 포맷팅 (settings.py 함수 활용)"""
         if not number_str:
             return None
         
@@ -114,18 +114,18 @@ class WebPageParser:
         if len(number) < 9 or len(number) > 11:
             return None
         
-        # 한국 전화번호 체계에 맞는지 확인 (수정: constants 함수 사용)
+        # 한국 전화번호 체계에 맞는지 확인 (settings 함수 사용)
         area_code = extract_phone_area_code(number)
         if not area_code or not is_valid_area_code(area_code):
             return None
         
-        # constants.py의 포맷팅 함수 사용 (수정)
+        # settings.py의 포맷팅 함수 사용
         return format_phone_number(number, area_code)
     
     # 한국 전화번호 체계 검증
     def is_valid_korean_phone_number(self, number):
-        """한국 전화번호 체계 검증 (constants.py 데이터 활용)"""
-        # constants.py의 지역번호 데이터 사용 (수정)
+        """한국 전화번호 체계 검증 (settings.py 데이터 활용)"""
+        # settings.py의 지역번호 데이터 사용
         for area_code in KOREAN_AREA_CODES.keys():
             if number.startswith(area_code):
                 return True
@@ -341,4 +341,4 @@ def test_parser():
     print("=" * 50)
 
 if __name__ == "__main__":
-    test_parser() 
+    test_parser()

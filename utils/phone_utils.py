@@ -14,12 +14,15 @@ from pathlib import Path
 
 # 프로젝트 루트 디렉토리 동적 탐지
 def find_project_root():
-    """constants.py가 있는 프로젝트 루트 디렉토리를 찾습니다"""
+    """settings.py가 있는 프로젝트 루트 디렉토리를 찾습니다"""
     current_path = Path(__file__).resolve()
     
-    # 상위 디렉토리들을 탐색하면서 constants.py 찾기
+    # 상위 디렉토리들을 탐색하면서 settings.py 찾기
     for parent in current_path.parents:
-        if (parent / 'constants.py').exists():
+        if (parent / 'settings.py').exists():
+            return str(parent)
+        # constants.py도 체크 (legacy 호환)
+        elif (parent / 'constants.py').exists():
             return str(parent)
     
     # 찾지 못하면 현재 파일의 상위 디렉토리 반환
@@ -30,24 +33,76 @@ project_root = find_project_root()
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-# 이제 constants를 안전하게 import
+# settings.py에서 필요한 함수들과 상수들 import
 try:
-    from constants import (
+    from settings import (
         KOREAN_AREA_CODES,
         VALID_AREA_CODES, 
         AREA_CODE_LENGTH_RULES,
-        PHONE_VALIDATION_PATTERN
+        PHONE_VALIDATION_PATTERN,
+        # 함수들 import
+        is_valid_area_code,
+        extract_phone_area_code,
+        format_phone_number as settings_format_phone_number
     )
+    print("✅ settings.py에서 전화번호 유틸리티 import 성공")
 except ImportError as e:
-    print(f"Warning: constants.py import 실패 - {e}")
+    print(f"Warning: settings.py import 실패 - {e}")
     # 기본값 사용...
     KOREAN_AREA_CODES = {
         "02": "서울", "031": "경기", "032": "인천", "033": "강원",
         "041": "충남", "042": "대전", "043": "충북", "044": "세종",
         "051": "부산", "052": "울산", "053": "대구", "054": "경북", 
-        "055": "경남", "061": "전남", "062": "광주", "063": "전북", "064": "제주"
+        "055": "경남", "061": "전남", "062": "광주", "063": "전북", "064": "제주",
+        "070": "인터넷전화", "010": "핸드폰", "017": "핸드폰"
     }
     VALID_AREA_CODES = list(KOREAN_AREA_CODES.keys())
+    
+    # 기본 함수들 정의
+    def is_valid_area_code(area_code: str) -> bool:
+        """유효한 지역번호인지 확인"""
+        return area_code in VALID_AREA_CODES
+    
+    def extract_phone_area_code(phone: str) -> str:
+        """전화번호에서 지역코드 추출"""
+        if not phone:
+            return None
+        
+        # 숫자만 추출
+        digits = re.sub(r'[^\d]', '', phone)
+        
+        # 지역코드 매칭
+        for code in KOREAN_AREA_CODES.keys():
+            if digits.startswith(code):
+                return code
+        
+        return None
+    
+    def settings_format_phone_number(digits: str, area_code: str) -> str:
+        """전화번호 포맷팅"""
+        if area_code == "02":
+            if len(digits) == 9:
+                return f"{digits[:2]}-{digits[2:5]}-{digits[5:]}"
+            else:
+                return f"{digits[:2]}-{digits[2:6]}-{digits[6:]}"
+        elif area_code in ["010", "017", "070"]:
+            return f"{digits[:3]}-{digits[3:7]}-{digits[7:]}"
+        else:
+            if len(digits) == 10:
+                return f"{digits[:3]}-{digits[3:6]}-{digits[6:]}"
+            else:
+                return f"{digits[:3]}-{digits[3:7]}-{digits[7:]}"
+    
+    # 기본 PHONE_VALIDATION_PATTERN 정의
+    PHONE_VALIDATION_PATTERN = re.compile(
+        r'(?:\+?82[-\s]?)?'     # 선택적 국가번호
+        r'(0\d{1,2})'                 # 지역번호 (0으로 시작, 1~2자리)
+        r'[-\.\)\s]?'                 # 구분자 (하이픈, 점, 오른쪽 괄호, 공백 등)
+        r'(\d{3,4})'                   # 중간 번호 (3~4자리)
+        r'[-\.\s]?'                     # 구분자
+        r'(\d{4})',                     # 마지막 번호 (4자리)
+        re.IGNORECASE
+    )
 
 class PhoneUtils:
     """전화번호 관련 유틸리티 클래스 - 중복 제거"""
@@ -74,16 +129,17 @@ class PhoneUtils:
         
         # 지역번호 검증
         area_code = PhoneUtils.extract_area_code(digits_only)
-        if not area_code or not constants_is_valid_area_code(area_code):
+        if not area_code or not is_valid_area_code(area_code):
             return False
         
-        # 길이 규칙 검증
-        length_rules = AREA_CODE_LENGTH_RULES.get(area_code, {})
-        min_length = length_rules.get('min_length', 9)
-        max_length = length_rules.get('max_length', 11)
-        
-        if not (min_length <= len(digits_only) <= max_length):
-            return False
+        # 길이 규칙 검증 (AREA_CODE_LENGTH_RULES가 있을 때만)
+        if 'AREA_CODE_LENGTH_RULES' in globals():
+            length_rules = AREA_CODE_LENGTH_RULES.get(area_code, {})
+            min_length = length_rules.get('min_length', 9)
+            max_length = length_rules.get('max_length', 11)
+            
+            if not (min_length <= len(digits_only) <= max_length):
+                return False
         
         # 정규식 패턴 검증
         formatted = PhoneUtils.format_phone_number(digits_only)
@@ -117,19 +173,36 @@ class PhoneUtils:
         if not area_code:
             return None
         
-        # constants.py의 포맷팅 함수 활용
+        # settings.py의 포맷팅 함수 활용
         try:
-            return constants_format_phone(digits_only, area_code)
-        except:
-            return None
+            return settings_format_phone_number(digits_only, area_code)
+        except Exception as e:
+            # fallback 포맷팅
+            return PhoneUtils._fallback_format(digits_only, area_code)
+    
+    @staticmethod
+    def _fallback_format(digits: str, area_code: str) -> str:
+        """포맷팅 fallback 함수"""
+        if area_code == "02":
+            if len(digits) == 9:
+                return f"{digits[:2]}-{digits[2:5]}-{digits[5:]}"
+            else:
+                return f"{digits[:2]}-{digits[2:6]}-{digits[6:]}"
+        elif area_code in ["010", "017", "070"]:
+            return f"{digits[:3]}-{digits[3:7]}-{digits[7:]}"
+        else:
+            if len(digits) == 10:
+                return f"{digits[:3]}-{digits[3:6]}-{digits[6:]}"
+            else:
+                return f"{digits[:3]}-{digits[3:7]}-{digits[7:]}"
     
     @staticmethod
     def extract_area_code(phone: str) -> Optional[str]:
         """
         지역번호 추출 (통합)
-        constants.py 함수 활용
+        settings.py 함수 활용
         """
-        return constants_extract_area_code(phone)
+        return extract_phone_area_code(phone)
     
     @staticmethod
     def normalize_phone_number(phone: str) -> str:
@@ -194,4 +267,46 @@ class PhoneUtils:
     @staticmethod
     def is_valid_area_code(area_code: str) -> bool:
         """유효한 지역번호인지 확인"""
-        return constants_is_valid_area_code(area_code)
+        return is_valid_area_code(area_code)
+
+# 테스트 함수
+def test_phone_utils():
+    """전화번호 유틸리티 테스트"""
+    test_phones = [
+        "02-123-4567",
+        "031-1234-5678", 
+        "010-1234-5678",
+        "070-1234-5678",
+        "02 123 4567",
+        "0212345678",
+        "82-2-123-4567"
+    ]
+    
+    print("=" * 50)
+    print("📞 전화번호 유틸리티 테스트")
+    print("=" * 50)
+    
+    for phone in test_phones:
+        print(f"\n🔍 테스트: {phone}")
+        
+        # 유효성 검증
+        is_valid = PhoneUtils.validate_korean_phone(phone)
+        print(f"  ✅ 유효성: {is_valid}")
+        
+        # 포맷팅
+        formatted = PhoneUtils.format_phone_number(phone)
+        print(f"  📝 포맷팅: {formatted}")
+        
+        # 지역번호 추출
+        area_code = PhoneUtils.extract_area_code(phone)
+        if area_code:
+            area_name = PhoneUtils.get_area_name(area_code)
+            print(f"  🌍 지역: {area_code} ({area_name})")
+        
+        # 지역번호+국번 추출
+        area, exchange = PhoneUtils.extract_area_and_exchange(phone)
+        if area and exchange:
+            print(f"  🔢 지역번호-국번: {area}-{exchange}")
+
+if __name__ == "__main__":
+    test_phone_utils()
