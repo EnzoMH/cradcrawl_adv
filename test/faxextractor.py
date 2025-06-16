@@ -83,28 +83,42 @@ def search_fax_number(driver, name):
         print(f"검색 실패 - {name}: {str(e)}")
         return []
 
-def update_fax_data():
-    """JSON 파일에서 팩스번호 업데이트"""
-    # JSON 파일 경로
-    input_file = Path("C:/Users/kimyh/makedb/Python/cradcrawl_adv/data/json/filtered_data_updated_20250613_013541.json")
+def count_empty_fax(data):
+    """비어있는 팩스번호 개수 계산"""
+    return sum(1 for item in data if not item.get('fax', '').strip())
+
+def update_fax_data_from_temp():
+    """임시 파일에서부터 팩스번호 업데이트 재개"""
+    # 임시 파일 경로
+    temp_file = Path("data/json/filtered_data_fax_updated_temp_20250613_160343.json")
     base_dir = Path(__file__).parent.parent
     json_dir = base_dir / "data" / "json"
     
-    # 시작 전 임시 파일 정리
-    cleanup_temp_files(json_dir)
+    if not temp_file.exists():
+        print(f"임시 파일을 찾을 수 없습니다: {temp_file}")
+        return
     
     # JSON 데이터 로드
-    with open(input_file, 'r', encoding='utf-8') as f:
+    with open(temp_file, 'r', encoding='utf-8') as f:
         data = json.load(f)
     
-    print(f"총 {len(data)}개의 항목을 처리합니다.")
+    print(f"총 {len(data)}개의 항목을 로드했습니다.")
+    
+    # 비어있는 팩스번호 개수 확인
+    empty_fax_count = count_empty_fax(data)
+    print(f"비어있는 팩스번호: {empty_fax_count}개")
+    
+    if empty_fax_count == 0:
+        print("모든 항목에 팩스번호가 채워져 있습니다.")
+        return
     
     # WebDriver 설정
     driver = setup_driver()
     
     try:
         updated_count = 0
-        last_temp_file = None  # 여기에 변수 선언 추가
+        processed_count = 0
+        last_temp_file = None
         
         # 각 항목에 대해 팩스번호 검색
         for i, item in enumerate(data):
@@ -112,11 +126,12 @@ def update_fax_data():
             current_fax = item.get('fax', '').strip()
             current_phone = item.get('phone', '').strip()
             
-            # 이름이 없거나 이미 팩스번호가 있는 경우 스킵
-            if not name or current_fax:
+            # 이미 팩스번호가 있거나 이름이 없는 경우 스킵
+            if current_fax or not name:
                 continue
-            
-            print(f"[{i+1}/{len(data)}] 검색 중: {name}")
+                
+            processed_count += 1
+            print(f"[{processed_count}/{empty_fax_count}] 검색 중: {name} (전체 {i+1}/{len(data)})")
             
             # 팩스번호 검색
             found_faxes = search_fax_number(driver, name)
@@ -138,8 +153,8 @@ def update_fax_data():
             # 요청 간 딜레이 (차단 방지)
             time.sleep(2)
             
-            # 중간 저장 (50개마다)
-            if (i + 1) % 50 == 0:
+            # 중간 저장 (50개 처리마다)
+            if processed_count % 50 == 0:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 temp_filename = f"filtered_data_fax_updated_temp_{timestamp}.json"
                 temp_path = json_dir / temp_filename
@@ -155,7 +170,7 @@ def update_fax_data():
                 # 새 임시 파일 저장
                 with open(temp_path, 'w', encoding='utf-8') as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
-                print(f"중간 저장 완료: {temp_path}")
+                print(f"중간 저장 완료: {temp_path} (처리된 항목: {processed_count}/{empty_fax_count})")
                 
                 # 현재 임시 파일 경로 저장
                 last_temp_file = temp_path
@@ -179,8 +194,16 @@ def update_fax_data():
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     
+    # 원본 임시 파일 삭제
+    try:
+        os.remove(temp_file)
+        print(f"원본 임시 파일 삭제: {temp_file.name}")
+    except Exception as e:
+        print(f"원본 임시 파일 삭제 실패: {str(e)}")
+    
     print(f"\n=== 처리 완료 ===")
     print(f"업데이트된 항목: {updated_count}개")
+    print(f"처리된 빈 팩스 항목: {processed_count}/{empty_fax_count}개")
     print(f"저장된 파일: {output_path}")
 
 def cleanup_temp_files(json_dir):
@@ -196,4 +219,5 @@ def cleanup_temp_files(json_dir):
                 print(f"파일 삭제 실패 - {temp_file.name}: {str(e)}")
 
 if __name__ == "__main__":
-    update_fax_data()
+    # 기존 함수 대신 새로운 함수 호출
+    update_fax_data_from_temp()
