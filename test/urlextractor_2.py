@@ -222,7 +222,55 @@ class HomepageParser:
             
             # 페이지 로드
             self.driver.get(url)
-            time.sleep(3)
+            
+            # 🔍 초기 상태 로그
+            self.logger.info(f"📊 초기 페이지 제목: {self.driver.title}")
+            self.logger.info(f"📊 초기 소스 크기: {len(self.driver.page_source)} bytes")
+            
+            # JavaScript 로딩 대기 (더 긴 시간)
+            time.sleep(5)  # 3초 → 5초로 증가
+            
+            # 추가 JavaScript 실행 완료 대기
+            try:
+                WebDriverWait(self.driver, 10).until(
+                    lambda driver: driver.execute_script("return document.readyState") == "complete"
+                )
+            except TimeoutException:
+                self.logger.warning("⚠️ 페이지 로딩 완료 대기 시간 초과")
+            
+            # 🔍 로딩 후 상태 로그
+            self.logger.info(f"📊 로딩 후 페이지 제목: {self.driver.title}")
+            self.logger.info(f"📊 로딩 후 소스 크기: {len(self.driver.page_source)} bytes")
+            
+            # iframe이 있는지 확인하고 처리
+            try:
+                iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
+                if iframes:
+                    self.logger.info(f"🖼️ iframe {len(iframes)}개 발견")
+                    # 주요 iframe으로 전환해서 내용 확인
+                    for i, iframe in enumerate(iframes[:3]):  # 최대 3개까지만
+                        try:
+                            self.driver.switch_to.frame(iframe)
+                            iframe_content = self.driver.find_element(By.TAG_NAME, "body").text
+                            self.logger.info(f"🖼️ iframe {i+1} 내용 길이: {len(iframe_content)} chars")
+                            self.driver.switch_to.default_content()
+                        except:
+                            self.logger.warning(f"🖼️ iframe {i+1} 접근 실패")
+                            self.driver.switch_to.default_content()
+            except:
+                pass
+            
+            # 🔍 실제 보이는 텍스트 확인
+            try:
+                visible_text = self.driver.find_element(By.TAG_NAME, "body").text
+                self.logger.info(f"👁️ 실제 보이는 텍스트 길이: {len(visible_text)} chars")
+                
+                if len(visible_text.strip()) < 50:
+                    self.logger.warning(f"⚠️ 실제 텍스트가 너무 적음. 전체 내용: '{visible_text}'")
+                else:
+                    self.logger.info(f"📝 실제 텍스트 시작 부분: '{visible_text[:200]}...'")
+            except:
+                self.logger.warning("👁️ body 텍스트 추출 실패")
             
             # 접근성 확인
             if self.is_page_accessible():
@@ -248,9 +296,22 @@ class HomepageParser:
                     text_content = re.sub(r'\s+', ' ', text_content).strip()
                     result["text_content"] = text_content[:self.max_content_length]
                     
+                    # 🔍 파싱된 내용 로그 추가
+                    self.logger.info(f"🌐 파싱된 페이지 제목: {result['title']}")
+                    self.logger.info(f"📄 파싱된 텍스트 내용 (처음 500자):\n{'-'*50}")
+                    self.logger.info(f"{text_content[:500]}...")
+                    self.logger.info(f"{'-'*50}")
+                    
                     # 메타 정보 추출
                     result["meta_info"] = self.extract_meta_info(soup)
                     
+                    # 🔍 메타 정보 로그 추가
+                    if result["meta_info"]:
+                        self.logger.info(f"📋 추출된 메타 정보:")
+                        for key, value in result["meta_info"].items():
+                            if value:
+                                self.logger.info(f"  - {key}: {value}")
+                
                 else:
                     # BeautifulSoup 없는 경우 직접 텍스트 추출
                     try:
@@ -262,6 +323,19 @@ class HomepageParser:
                 
                 # 연락처 정보 추출
                 result["contact_info"] = self.extract_contact_info(result["text_content"])
+                
+                # 🔍 연락처 정보 로그 추가
+                contact = result["contact_info"]
+                if any(contact.values()):
+                    self.logger.info(f"📞 추출된 연락처 정보:")
+                    if contact["phones"]:
+                        self.logger.info(f"  - 전화번호: {', '.join(contact['phones'])}")
+                    if contact["emails"]:
+                        self.logger.info(f"  - 이메일: {', '.join(contact['emails'])}")
+                    if contact["addresses"]:
+                        self.logger.info(f"  - 주소: {', '.join(contact['addresses'])}")
+                    if contact["faxes"]:
+                        self.logger.info(f"  - 팩스: {', '.join(contact['faxes'])}")
                 
                 self.logger.info(f"✅ 페이지 파싱 성공: {len(result['text_content'])} chars")
                 
@@ -871,9 +945,13 @@ def main():
         # 파서 인스턴스 생성
         parser = HomepageParser(headless=use_headless)
         
-        # 파일 경로 설정 (data/json 디렉토리로 수정)
-        base_dir = r"C:\Users\kimyh\makedb\Python\cradcrawl_adv"
+        # 파일 경로 설정 - 동적으로 프로젝트 루트 찾기
+        current_dir = os.path.dirname(os.path.abspath(__file__))  # test 디렉토리
+        base_dir = os.path.dirname(current_dir)  # 프로젝트 루트 디렉토리
         data_json_dir = os.path.join(base_dir, "data", "json")
+        
+        print(f"📂 프로젝트 루트: {base_dir}")
+        print(f"📂 JSON 디렉토리: {data_json_dir}")
         
         # 우선 순위 파일 목록
         priority_files = [
