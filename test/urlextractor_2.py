@@ -24,6 +24,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
 
 # 프로젝트 루트 경로 설정
@@ -52,9 +54,10 @@ except ImportError as e:
     GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
     LOGGER_NAMES = {"parser": "web_parser"}
 
-# AI 변수들을 먼저 초기화 (중요!)
+# AI 및 BS4 초기화 (기존 코드와 동일)
 AI_AVAILABLE = False
 genai = None
+BS4_AVAILABLE = False
 
 # AI 모델 import 및 초기화
 try:
@@ -70,15 +73,7 @@ except ImportError as e:
     AI_AVAILABLE = False
     genai = None
     print(f"⚠️ google.generativeai 모듈 import 실패: {e}")
-except Exception as e:
-    AI_AVAILABLE = False
-    genai = None
-    print(f"⚠️ AI 모듈 초기화 실패: {e}")
 
-# BeautifulSoup 변수도 먼저 초기화
-BS4_AVAILABLE = False
-
-# BeautifulSoup import
 try:
     from bs4 import BeautifulSoup
     BS4_AVAILABLE = True
@@ -111,9 +106,28 @@ class HomepageParser:
             print("🔧 AI 기능 비활성화")
         
         # 파싱 설정
-        self.page_timeout = 15
+        self.page_timeout = 30
         self.delay_range = (2, 4)
         self.max_content_length = 10000  # AI 처리용 최대 텍스트 길이
+        self.max_wait_time = 20  # JavaScript 로딩 최대 대기시간
+
+        # 동적 콘텐츠 감지를 위한 선택자들
+        self.content_selectors = [
+            'main', 'article', '.content', '#content', '.main-content',
+            '.container', '.wrapper', 'section', '.section',
+            '.page-content', '.post-content', '.entry-content',
+            '[role="main"]', '.main'
+        ]
+        
+        # 연락처 관련 선택자들
+        self.contact_selectors = [
+            '.contact', '#contact', '.contact-info', '.contact-us',
+            '.footer', '#footer', '.footer-info',
+            '.address', '.phone', '.tel', '.email',
+            '[class*="contact"]', '[id*="contact"]',
+            '[class*="footer"]', '[id*="footer"]',
+            'footer', 'address'
+        ]
         
     def setup_logger(self) -> logging.Logger:
         """로거 설정"""
@@ -146,11 +160,10 @@ class HomepageParser:
         return logger
     
     def setup_driver(self):
-        """Selenium WebDriver 설정"""
+        """향상된 Selenium WebDriver 설정"""
         try:
             chrome_options = Options()
             
-            # headless 설정 (False로 설정하여 브라우저 창 표시)
             if self.headless:
                 chrome_options.add_argument('--headless')
             
@@ -161,13 +174,20 @@ class HomepageParser:
             chrome_options.add_argument('--window-size=1920,1080')
             chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
             
+            # JavaScript 실행을 위한 추가 설정
+            chrome_options.add_argument('--enable-javascript')
+            chrome_options.add_argument('--disable-web-security')  # 일부 CORS 이슈 해결
+            chrome_options.add_argument('--allow-running-insecure-content')
+            
+            # 성능 개선
+            chrome_options.add_argument('--disable-extensions')
+            chrome_options.add_argument('--disable-plugins')
+            chrome_options.add_argument('--disable-images')  # 이미지 로딩 비활성화로 속도 개선
+            
             # 자동화 탐지 우회
             chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
             chrome_options.add_experimental_option('useAutomationExtension', False)
-            
-            # 추가 설정
             chrome_options.add_argument('--disable-blink-features=AutomationControlled')
-            chrome_options.add_argument('--disable-extensions')
             
             # 드라이버 생성
             self.driver = webdriver.Chrome(options=chrome_options)
@@ -175,9 +195,9 @@ class HomepageParser:
             
             # 타임아웃 설정
             self.driver.set_page_load_timeout(self.page_timeout)
-            self.driver.implicitly_wait(10)
+            self.driver.implicitly_wait(5)  # 암시적 대기 시간 단축
             
-            self.logger.info(f"Chrome 드라이버 설정 완료 (headless: {self.headless})")
+            self.logger.info(f"향상된 Chrome 드라이버 설정 완료 (headless: {self.headless})")
             
         except Exception as e:
             self.logger.error(f"드라이버 설정 실패: {e}")
@@ -198,9 +218,290 @@ class HomepageParser:
         delay = random.uniform(*self.delay_range)
         self.logger.info(f"지연 시간: {delay:.1f}초")
         time.sleep(delay)
+
+    def wait_for_dynamic_content(self, url: str) -> bool:
+        """동적 콘텐츠 로딩 대기 (강화된 버전)"""
+        try:
+            self.logger.info("🔄 강화된 동적 콘텐츠 로딩 대기 시작...")
+            
+            # 1. 기본 페이지 로딩 완료 대기
+            WebDriverWait(self.driver, 15).until(
+                lambda driver: driver.execute_script("return document.readyState") == "complete"
+            )
+            
+            # 2. 초기 콘텐츠 길이 측정
+            initial_length = len(self.driver.page_source)
+            
+            # 3. 여러 JavaScript 프레임워크 대기
+            self._wait_for_js_frameworks()
+            
+            # 4. 동적 로딩 감지 및 대기
+            stable_count = 0
+            max_wait_cycles = 8
+            
+            for cycle in range(max_wait_cycles):
+                time.sleep(2)
+                
+                # 페이지 스크롤로 lazy loading 트리거
+                self.trigger_lazy_loading()
+                
+                # 새로운 콘텐츠 길이 측정
+                current_length = len(self.driver.page_source)
+                
+                # 콘텐츠 변화가 없으면 안정된 것으로 판단
+                if abs(current_length - initial_length) < 1000:
+                    stable_count += 1
+                    if stable_count >= 2:  # 2번 연속 안정되면 완료
+                        self.logger.info(f"✅ 콘텐츠 안정화 완료 (사이클 {cycle+1})")
+                        break
+                else:
+                    stable_count = 0
+                    initial_length = current_length
+                    self.logger.info(f"📊 콘텐츠 변화 감지: {current_length:,} bytes")
+            
+            # 5. 최종 요소 대기
+            return self._wait_for_critical_elements()
+            
+        except Exception as e:
+            self.logger.error(f"❌ 강화된 동적 콘텐츠 대기 중 오류: {e}")
+            return False
+
+    def _wait_for_js_frameworks(self):
+        """다양한 JavaScript 프레임워크 로딩 대기"""
+        try:
+            # jQuery 대기
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    lambda driver: driver.execute_script(
+                        "return typeof jQuery === 'undefined' || (jQuery.active === 0 && jQuery(':animated').length === 0)"
+                    )
+                )
+                self.logger.info("✅ jQuery 완료")
+            except:
+                pass
+            
+            # React 대기
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    lambda driver: driver.execute_script(
+                        """
+                        if (typeof React === 'undefined') return true;
+                        const reactFiber = document.querySelector('[data-reactroot]');
+                        return reactFiber ? true : document.readyState === 'complete';
+                        """
+                    )
+                )
+                self.logger.info("✅ React 확인")
+            except:
+                pass
+            
+            # Vue.js 대기
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    lambda driver: driver.execute_script(
+                        """
+                        if (typeof Vue === 'undefined') return true;
+                        return document.readyState === 'complete';
+                        """
+                    )
+                )
+                self.logger.info("✅ Vue.js 확인")
+            except:
+                pass
+            
+            # Angular 대기
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    lambda driver: driver.execute_script(
+                        """
+                        if (typeof angular === 'undefined') return true;
+                        const injector = angular.element(document).injector();
+                        if (!injector) return true;
+                        const http = injector.get('$http');
+                        return http.pendingRequests.length === 0;
+                        """
+                    )
+                )
+                self.logger.info("✅ Angular 확인")
+            except:
+                pass
+                
+        except Exception as e:
+            self.logger.warning(f"JavaScript 프레임워크 대기 오류: {e}")
+
+    def _wait_for_critical_elements(self) -> bool:
+        """핵심 요소들이 로드될 때까지 대기"""
+        try:
+            # 텍스트 콘텐츠가 있는 주요 요소 대기
+            text_selectors = [
+                'p', 'div', 'span', 'article', 'section', 
+                '.content', '.main', '.container'
+            ]
+            
+            for selector in text_selectors:
+                try:
+                    WebDriverWait(self.driver, 3).until(
+                        lambda driver: len(driver.find_elements(By.CSS_SELECTOR, f"{selector}:not(:empty)")) > 0
+                    )
+                    self.logger.info(f"✅ 텍스트 요소 발견: {selector}")
+                    break
+                except TimeoutException:
+                    continue
+            
+            # 이미지 로딩 완료 대기 (선택적)
+            try:
+                self.driver.execute_script("""
+                    const images = document.querySelectorAll('img');
+                    return Array.from(images).every(img => img.complete || img.naturalWidth > 0);
+                """)
+                self.logger.info("✅ 이미지 로딩 확인")
+            except:
+                pass
+            
+            return True
+            
+        except Exception as e:
+            self.logger.warning(f"핵심 요소 대기 오류: {e}")
+            return False
+
+    def trigger_lazy_loading(self):
+        """강화된 Lazy loading 트리거"""
+        try:
+            # 1. 기본 스크롤
+            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(1)
+            
+            # 2. 단계별 스크롤 (더 세밀하게)
+            scroll_steps = [0.25, 0.5, 0.75, 1.0, 0.5, 0]
+            for step in scroll_steps:
+                scroll_position = f"document.body.scrollHeight * {step}"
+                self.driver.execute_script(f"window.scrollTo(0, {scroll_position});")
+                time.sleep(0.8)
+            
+            # 3. 가시성 트리거 (intersection observer 이벤트)
+            self.driver.execute_script("""
+                // 모든 요소에 대해 스크롤 이벤트 트리거
+                window.dispatchEvent(new Event('scroll'));
+                window.dispatchEvent(new Event('resize'));
+                
+                // lazy loading 속성을 가진 이미지들 강제 로딩
+                document.querySelectorAll('img[loading="lazy"], img[data-src]').forEach(img => {
+                    if (img.dataset.src) {
+                        img.src = img.dataset.src;
+                    }
+                    img.scrollIntoView({behavior: 'smooth', block: 'center'});
+                });
+            """)
+            
+            time.sleep(2)
+            self.logger.info("📜 강화된 스크롤 트리거 완료")
+            
+        except Exception as e:
+            self.logger.warning(f"강화된 스크롤 트리거 실패: {e}")
+    
+    def extract_content_with_multiple_strategies(self) -> Dict[str, str]:
+        """여러 전략으로 콘텐츠 추출"""
+        content_results = {
+            "full_text": "",
+            "main_content": "",
+            "contact_content": "",
+            "method_used": "none"
+        }
+        
+        try:
+            # 전략 1: BeautifulSoup으로 전체 파싱
+            if BS4_AVAILABLE:
+                page_source = self.driver.page_source
+                soup = BeautifulSoup(page_source, 'html.parser')
+                
+                # 스크립트, 스타일 제거
+                for element in soup(["script", "style", "noscript", "meta", "link"]):
+                    element.decompose()
+                
+                # 전체 텍스트
+                full_text = soup.get_text()
+                full_text = re.sub(r'\s+', ' ', full_text).strip()
+                content_results["full_text"] = full_text
+                content_results["method_used"] = "beautifulsoup"
+                
+                self.logger.info(f"✅ BeautifulSoup 파싱: {len(full_text)} chars")
+            
+            # 전략 2: 주요 콘텐츠 영역 타겟팅
+            main_content_texts = []
+            for selector in self.content_selectors:
+                try:
+                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    for element in elements:
+                        text = element.text.strip()
+                        if len(text) > 100:  # 의미있는 콘텐츠만
+                            main_content_texts.append(text)
+                            self.logger.info(f"📝 주요 콘텐츠 발견 ({selector}): {len(text)} chars")
+                except:
+                    continue
+            
+            if main_content_texts:
+                content_results["main_content"] = " ".join(main_content_texts)
+                if not content_results["method_used"] or content_results["method_used"] == "none":
+                    content_results["method_used"] = "targeted_selectors"
+            
+            # 전략 3: 연락처 정보 영역 특별 추출
+            contact_texts = []
+            for selector in self.contact_selectors:
+                try:
+                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    for element in elements:
+                        text = element.text.strip()
+                        if len(text) > 20:  # 연락처 정보는 더 짧아도 됨
+                            contact_texts.append(text)
+                except:
+                    continue
+            
+            if contact_texts:
+                content_results["contact_content"] = " ".join(contact_texts)
+                self.logger.info(f"📞 연락처 영역 발견: {len(contact_texts)}개 섹션")
+            
+            # 전략 4: Selenium 직접 텍스트 추출 (fallback)
+            if not any([content_results["full_text"], content_results["main_content"]]):
+                try:
+                    body_element = self.driver.find_element(By.TAG_NAME, "body")
+                    selenium_text = body_element.text.strip()
+                    content_results["full_text"] = selenium_text
+                    content_results["method_used"] = "selenium_direct"
+                    self.logger.info(f"🔄 Selenium 직접 추출: {len(selenium_text)} chars")
+                except:
+                    self.logger.warning("❌ 모든 콘텐츠 추출 방법 실패")
+            
+            # 가장 긴 텍스트를 메인으로 사용
+            all_texts = [
+                content_results["full_text"],
+                content_results["main_content"],
+                content_results["contact_content"]
+            ]
+            
+            longest_text = max(all_texts, key=len) if any(all_texts) else ""
+            
+            self.logger.info(f"📊 콘텐츠 추출 결과:")
+            self.logger.info(f"  - 전체 텍스트: {len(content_results['full_text'])} chars")
+            self.logger.info(f"  - 주요 콘텐츠: {len(content_results['main_content'])} chars")
+            self.logger.info(f"  - 연락처 콘텐츠: {len(content_results['contact_content'])} chars")
+            self.logger.info(f"  - 사용된 방법: {content_results['method_used']}")
+            self.logger.info(f"  - 최종 선택: {len(longest_text)} chars")
+            
+            # 최종 텍스트 설정
+            if longest_text:
+                content_results["final_text"] = longest_text[:self.max_content_length]
+            else:
+                content_results["final_text"] = ""
+            
+        except Exception as e:
+            self.logger.error(f"❌ 콘텐츠 추출 오류: {e}")
+            content_results["final_text"] = ""
+            content_results["method_used"] = "error"
+        
+        return content_results
     
     def extract_page_content(self, url: str) -> Dict[str, Any]:
-        """페이지 내용 추출"""
+        """향상된 페이지 내용 추출"""
         result = {
             "url": url,
             "status": "success",
@@ -213,131 +514,67 @@ class HomepageParser:
                 "addresses": []
             },
             "meta_info": {},
+            "parsing_details": {},
             "error": None,
             "accessible": False
         }
         
         try:
-            self.logger.info(f"🌐 페이지 접속: {url}")
+            self.logger.info(f"🌐 향상된 페이지 접속: {url}")
             
-            # 페이지 로드
+            # 1. 페이지 로드
+            load_start_time = time.time()
             self.driver.get(url)
             
-            # 🔍 초기 상태 로그
-            self.logger.info(f"📊 초기 페이지 제목: {self.driver.title}")
-            self.logger.info(f"📊 초기 소스 크기: {len(self.driver.page_source)} bytes")
+            # 2. 동적 콘텐츠 대기 (핵심 개선)
+            dynamic_loading_success = self.wait_for_dynamic_content(url)
+            load_end_time = time.time()
             
-            # JavaScript 로딩 대기 (더 긴 시간)
-            time.sleep(5)  # 3초 → 5초로 증가
-            
-            # 추가 JavaScript 실행 완료 대기
-            try:
-                WebDriverWait(self.driver, 10).until(
-                    lambda driver: driver.execute_script("return document.readyState") == "complete"
-                )
-            except TimeoutException:
-                self.logger.warning("⚠️ 페이지 로딩 완료 대기 시간 초과")
-            
-            # 🔍 로딩 후 상태 로그
-            self.logger.info(f"📊 로딩 후 페이지 제목: {self.driver.title}")
-            self.logger.info(f"📊 로딩 후 소스 크기: {len(self.driver.page_source)} bytes")
-            
-            # iframe이 있는지 확인하고 처리
-            try:
-                iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
-                if iframes:
-                    self.logger.info(f"🖼️ iframe {len(iframes)}개 발견")
-                    # 주요 iframe으로 전환해서 내용 확인
-                    for i, iframe in enumerate(iframes[:3]):  # 최대 3개까지만
-                        try:
-                            self.driver.switch_to.frame(iframe)
-                            iframe_content = self.driver.find_element(By.TAG_NAME, "body").text
-                            self.logger.info(f"🖼️ iframe {i+1} 내용 길이: {len(iframe_content)} chars")
-                            self.driver.switch_to.default_content()
-                        except:
-                            self.logger.warning(f"🖼️ iframe {i+1} 접근 실패")
-                            self.driver.switch_to.default_content()
-            except:
-                pass
-            
-            # 🔍 실제 보이는 텍스트 확인
-            try:
-                visible_text = self.driver.find_element(By.TAG_NAME, "body").text
-                self.logger.info(f"👁️ 실제 보이는 텍스트 길이: {len(visible_text)} chars")
-                
-                if len(visible_text.strip()) < 50:
-                    self.logger.warning(f"⚠️ 실제 텍스트가 너무 적음. 전체 내용: '{visible_text}'")
-                else:
-                    self.logger.info(f"📝 실제 텍스트 시작 부분: '{visible_text[:200]}...'")
-            except:
-                self.logger.warning("👁️ body 텍스트 추출 실패")
-            
-            # 접근성 확인
+            # 3. 접근성 확인
             if self.is_page_accessible():
                 result["accessible"] = True
                 
-                # 기본 정보 추출
+                # 4. 기본 정보 추출
                 result["title"] = self.driver.title or ""
                 
-                # 페이지 소스 가져오기
-                page_source = self.driver.page_source
+                # 5. 다중 전략으로 콘텐츠 추출
+                content_data = self.extract_content_with_multiple_strategies()
+                result["text_content"] = content_data["final_text"]
                 
-                # BeautifulSoup으로 파싱 (가능한 경우)
+                # 6. 파싱 세부 정보 기록
+                result["parsing_details"] = {
+                    "load_time_seconds": round(load_end_time - load_start_time, 2),
+                    "dynamic_loading_success": dynamic_loading_success,
+                    "content_extraction_method": content_data["method_used"],
+                    "full_text_length": len(content_data["full_text"]),
+                    "main_content_length": len(content_data["main_content"]),
+                    "contact_content_length": len(content_data["contact_content"]),
+                    "final_text_length": len(content_data["final_text"])
+                }
+                
+                # 7. 메타 정보 추출 (BeautifulSoup 사용)
                 if BS4_AVAILABLE:
-                    soup = BeautifulSoup(page_source, 'html.parser')
-                    
-                    # 스크립트, 스타일 제거
-                    for element in soup(["script", "style", "noscript"]):
-                        element.decompose()
-                    
-                    # 텍스트 내용 추출
-                    text_content = soup.get_text()
-                    # 공백 정리
-                    text_content = re.sub(r'\s+', ' ', text_content).strip()
-                    result["text_content"] = text_content[:self.max_content_length]
-                    
-                    # 🔍 파싱된 내용 로그 추가
-                    self.logger.info(f"🌐 파싱된 페이지 제목: {result['title']}")
-                    self.logger.info(f"📄 파싱된 텍스트 내용 (처음 500자):\n{'-'*50}")
-                    self.logger.info(f"{text_content[:500]}...")
-                    self.logger.info(f"{'-'*50}")
-                    
-                    # 메타 정보 추출
-                    result["meta_info"] = self.extract_meta_info(soup)
-                    
-                    # 🔍 메타 정보 로그 추가
-                    if result["meta_info"]:
-                        self.logger.info(f"📋 추출된 메타 정보:")
-                        for key, value in result["meta_info"].items():
-                            if value:
-                                self.logger.info(f"  - {key}: {value}")
-                
-                else:
-                    # BeautifulSoup 없는 경우 직접 텍스트 추출
                     try:
-                        body_element = self.driver.find_element(By.TAG_NAME, "body")
-                        text_content = body_element.text
-                        result["text_content"] = text_content[:self.max_content_length]
-                    except:
-                        result["text_content"] = ""
+                        soup = BeautifulSoup(self.driver.page_source, 'html.parser')
+                        result["meta_info"] = self.extract_meta_info(soup)
+                    except Exception as e:
+                        self.logger.warning(f"메타 정보 추출 실패: {e}")
+                        result["meta_info"] = {}
                 
-                # 연락처 정보 추출
-                result["contact_info"] = self.extract_contact_info(result["text_content"])
+                # 8. 연락처 정보 추출 (모든 텍스트에서)
+                all_text_for_contact = " ".join([
+                    content_data["full_text"],
+                    content_data["main_content"],
+                    content_data["contact_content"]
+                ])
+                result["contact_info"] = self.extract_contact_info(all_text_for_contact)
                 
-                # 🔍 연락처 정보 로그 추가
-                contact = result["contact_info"]
-                if any(contact.values()):
-                    self.logger.info(f"📞 추출된 연락처 정보:")
-                    if contact["phones"]:
-                        self.logger.info(f"  - 전화번호: {', '.join(contact['phones'])}")
-                    if contact["emails"]:
-                        self.logger.info(f"  - 이메일: {', '.join(contact['emails'])}")
-                    if contact["addresses"]:
-                        self.logger.info(f"  - 주소: {', '.join(contact['addresses'])}")
-                    if contact["faxes"]:
-                        self.logger.info(f"  - 팩스: {', '.join(contact['faxes'])}")
-                
-                self.logger.info(f"✅ 페이지 파싱 성공: {len(result['text_content'])} chars")
+                # 9. 결과 로깅
+                self.logger.info(f"✅ 향상된 파싱 성공:")
+                self.logger.info(f"  - 로딩 시간: {result['parsing_details']['load_time_seconds']}초")
+                self.logger.info(f"  - 동적 로딩: {dynamic_loading_success}")
+                self.logger.info(f"  - 최종 텍스트: {len(result['text_content'])} chars")
+                self.logger.info(f"  - 연락처: {sum(len(v) for v in result['contact_info'].values())}개")
                 
             else:
                 result["status"] = "inaccessible"
@@ -357,21 +594,32 @@ class HomepageParser:
         return result
     
     def is_page_accessible(self) -> bool:
-        """페이지 접근 가능 여부 확인"""
+        """페이지 접근 가능 여부 확인 (개선된 버전)"""
         try:
-            # 타이틀 확인
+            # 1. 타이틀 확인
             title = self.driver.title.lower()
-            if any(keyword in title for keyword in ['404', 'not found', 'error', '오류', '찾을 수 없']):
+            if any(keyword in title for keyword in ['404', 'not found', 'error', '오류', '찾을 수 없', '접근 거부']):
                 return False
             
-            # 페이지 소스 크기 확인
+            # 2. 페이지 소스 크기 확인
             page_source = self.driver.page_source
-            if len(page_source) < 500:  # 너무 작은 페이지
+            if len(page_source) < 1000:  # 최소 크기 증가
                 return False
             
-            # 에러 메시지 확인
-            error_keywords = ['404', 'not found', 'page not found', '페이지를 찾을 수 없', '접근이 거부']
-            if any(keyword in page_source.lower() for keyword in error_keywords):
+            # 3. 실제 body 텍스트 확인
+            try:
+                body_text = self.driver.find_element(By.TAG_NAME, "body").text.strip()
+                if len(body_text) < 50:  # 실제 텍스트가 너무 적음
+                    return False
+            except:
+                return False
+            
+            # 4. 에러 메시지 확인 (페이지 소스와 body 텍스트 모두)
+            error_keywords = ['404', 'not found', 'page not found', '페이지를 찾을 수 없', 
+                            '접근이 거부', 'access denied', 'forbidden', '503', '500']
+            
+            combined_text = (page_source + " " + body_text).lower()
+            if any(keyword in combined_text for keyword in error_keywords):
                 return False
             
             return True

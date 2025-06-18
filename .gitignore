@@ -1,8 +1,8 @@
-# JSON files
-# *.json
+JSON files
+*.json
 
-# Excel files
-# *.xlsx
+Excel files
+*.xlsx
 
 # Environment files
 *.env
