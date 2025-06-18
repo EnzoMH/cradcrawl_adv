@@ -1,0 +1,125 @@
+# Advanced Crawling 프로젝트 디렉토리 구조
+# 생성일: 2025-06-18
+# 최종 수정: 2025-06-18
+
+## 🏗️ 프로젝트 루트 구조
+advanced_crawling/
+├── 📁 .git/                      # Git 버전 관리
+├── 📄 .gitignore                 # Git 무시 파일 목록
+├── 📄 directory.txt              # 프로젝트 구조 문서 (이 파일)
+├── 📄 README.md                  # 프로젝트 설명서
+├── 📄 project_structure.md       # 프로젝트 구조 상세 문서
+├── 📄 requirements.txt           # Python 패키지 의존성
+
+## 🚀 핵심 애플리케이션 파일들
+├── 📄 app.py                     # FastAPI 웹 애플리케이션 메인
+├── 📄 crawler_main.py            # 크롤링 메인 모듈
+├── 📄 naver_map_crawler.py       # 네이버 지도 크롤러
+├── 📄 parser.py                  # 데이터 파싱 모듈
+├── 📄 data_processor.py          # 데이터 처리기
+├── 📄 ai_helpers.py              # AI 도움 기능
+├── 📄 validator.py               # 데이터 검증 도구
+├── 📄 config.py                  # 설정 파일
+├── 📄 settings.py                # 애플리케이션 설정
+
+## 📁 데이터 저장소
+├── 📁 data/
+│   ├── 📁 json/                  # JSON 데이터 파일들
+│   │   ├── 📄 merged_church_data_20250618_174032.json  # 🎯 메인 병합 데이터
+│   │   ├── 📄 parsed_homepages_20250617_192102.json    # 홈페이지 파싱 결과
+│   │   ├── 📄 church_data_converted_20250617_202219.json # 교회 데이터 변환
+│   │   ├── 📄 raw_data_0530.json                       # 원본 데이터
+│   │   └── 📄 (기타 JSON 파일들...)
+│   ├── 📁 excel/                 # Excel 데이터 파일들
+│   └── 📁 csv/                   # CSV 데이터 파일들
+
+## 🔧 유틸리티 모듈
+├── 📁 utils/
+│   ├── 📄 converter.py           # 데이터 변환 도구
+│   ├── 📄 crawler_utils.py       # 크롤링 유틸리티
+│   ├── 📄 file_utils.py          # 파일 처리 유틸리티
+│   ├── 📄 logger_utils.py        # 로깅 유틸리티
+│   ├── 📄 phone_utils.py         # 전화번호 처리 도구
+│   ├── 📄 vpngate.py             # VPN 게이트 도구
+│   └── 📄 vpngate2.py            # VPN 게이트 도구 v2
+
+## 🌐 웹 애플리케이션 템플릿
+├── 📁 templates/
+│   ├── 📁 html/
+│   │   └── 📄 index.html         # 메인 웹페이지
+│   ├── 📁 css/
+│   │   └── 📄 style.css          # 스타일시트
+│   └── 📁 js/
+│       └── 📄 main.js            # 메인 JavaScript
+
+## 🧪 테스트 및 실험 파일들
+├── 📁 test/
+│   ├── 📄 jsonmergin.py          # 🎯 JSON 병합 도구 (최신 작업)
+│   ├── 📄 exceltojson.py         # Excel → JSON 변환기
+│   ├── 📄 newdata.py             # 새 데이터 처리
+│   ├── 📄 urlextractor_2.py      # URL 추출기 v2
+│   ├── 📄 faxextractor.py        # 팩스 번호 추출기
+│   ├── 📄 phoneextractor.py      # 전화번호 추출기
+│   └── 📄 homepage_parser.log    # 로그 파일 (5.7MB)
+
+## 🗂️ 레거시 파일들
+├── 📁 legacy/
+│   ├── 📄 advcrawler.py          # 고급 크롤러 (구버전)
+│   ├── 📄 combined.py            # 통합 모듈 (구버전)
+│   ├── 📄 config.py              # 설정 파일 (구버전)
+│   ├── 📄 constants.py           # 상수 정의 (구버전)
+│   ├── 📄 constants_extended.py  # 확장 상수 (구버전)
+│   ├── 📄 csvtojson.py           # CSV → JSON 변환기
+│   ├── 📄 data_statistics.py     # 데이터 통계 분석
+│   ├── 📄 enhanced_detail_extractor.py # 향상된 상세 추출기
+│   ├── 📄 exceltojson.py         # Excel → JSON 변환기
+│   ├── 📄 fax_crawler.py         # 팩스 크롤러
+│   ├── 📄 jsontocsv.py           # JSON → CSV 변환기
+│   ├── 📄 jsontoexcel.py         # JSON → Excel 변환기
+│   ├── 📄 naver_map_crawler.py   # 네이버 지도 크롤러 (구버전)
+│   ├── 📄 simple_vpn_extractor.py # 간단한 VPN 추출기
+│   ├── 📄 url_extractor.py       # URL 추출기 (구버전)
+│   ├── 📄 url_extractor_enhanced.py # 향상된 URL 추출기
+│   └── 📄 validator.py           # 검증기 (구버전)
+
+## 📊 로그 디렉토리
+├── 📁 logs/                      # 애플리케이션 로그 파일들
+
+## 📦 정적 파일들 (웹 서빙용)
+└── 📁 static/                    # 정적 파일 서빙 디렉토리
+
+## 📝 현재 상태 (2025-06-18)
+- 🎯 메인 데이터: merged_church_data_20250618_174032.json
+- 🌐 웹 애플리케이션: FastAPI + HTML/CSS/JS
+- 🏗️ 다음 작업: SQLite CRM 시스템 구축
+- 👥 사용자: 8명 (관리자1, 관리자2, 영업6명, 개발자1)
+
+## 🚀 계획된 추가 파일들
+├── 📄 database.py                # SQLite CRM 데이터베이스 모듈 (계획)
+├── 📄 migrate_json_to_db.py      # JSON → SQLite 마이그레이션 (계획)
+├── 📄 auth.py                    # 인증 모듈 (계획)
+├── 📄 churches_crm.db            # SQLite 데이터베이스 파일 (계획)
+└── 📁 migrations/                # 데이터베이스 마이그레이션 스크립트들 (계획)
+
+## 🔐 보안 관련
+- IP 제한 기능 (계획)
+- 사용자 인증 시스템 (계획)
+- 세션 관리 (계획)
+
+## 📈 성능 최적화
+- SQLite WAL 모드 사용 (계획)
+- 페이징 처리 (계획)
+- 인덱싱 최적화 (계획)
+
+---
+# 파일 크기 참고사항
+- 큰 파일들:
+  * test/homepage_parser.log: 5.7MB
+  * test/urlextractor_2.py: 60KB
+  * validator.py: 29KB
+  * utils/converter.py: 24KB
+
+# 중요 JSON 파일들
+- merged_church_data_20250618_174032.json: 메인 병합 데이터 (교회 18,000+개)
+- parsed_homepages_20250617_192102.json: 홈페이지 파싱 결과 (4MB)
+- church_data_converted_20250617_202219.json: 변환된 교회 데이터 (14MB)
