@@ -1,579 +1,462 @@
-let statusInterval;
-let resultsInterval;
-let lastResultCount = 0;
+// ===== CRM 시스템 메인 로직 =====
 
-// 🆕 추가: 실시간 모니터링 관련 변수
-let progressInterval = null;
-let resultsContainer = null;
-let isRealTimeMonitoringActive = false;
-
-// 상태 업데이트
-function updateStatus(message) {
-    const statusElement = document.getElementById('status');
-    if (statusElement) {
-        statusElement.textContent = message;
-        statusElement.className = 'status-message';
+class CRMSystem {
+    constructor() {
+        this.currentUser = null;
+        this.organizations = [];
+        this.currentPage = 'dashboard';
+        this.crawlingStatus = null;
+        this.filters = {
+            search: '',
+            category: '',
+            status: '',
+            page: 1,
+            perPage: 20
+        };
+        this.intervals = {
+            crawling: null,
+            dashboard: null
+        };
     }
-    console.log('상태 업데이트:', message);
-}
 
-// 실시간 결과 업데이트
-function updateResults() {
-    fetch('/api/results')
-        .then(response => response.json())
-        .then(data => {
-            if (data.count > lastResultCount) {
-                displayRealtimeResults(data.results);
-                lastResultCount = data.count;
+    // ===== 초기화 =====
+    async init() {
+        try {
+            await this.checkAuth();
+            await this.loadInitialData();
+            UI.renderApp(this);
+            this.startBackgroundTasks();
+        } catch (error) {
+            console.error('시스템 초기화 실패:', error);
+            UI.showError('시스템을 시작할 수 없습니다.');
+        }
+    }
+
+    // ===== 인증 관련 =====
+    async checkAuth() {
+        // TODO: 실제 인증 구현시 추가
+        this.currentUser = {
+            id: 1,
+            username: 'admin',
+            role: '관리자',
+            fullName: '시스템 관리자'
+        };
+    }
+
+    async logout() {
+        try {
+            // await this.api.logout();
+            this.currentUser = null;
+            window.location.reload();
+        } catch (error) {
+            console.error('로그아웃 실패:', error);
+        }
+    }
+
+    // ===== 데이터 관리 =====
+    async loadInitialData() {
+        const promises = [
+            this.loadDashboardStats(),
+            this.checkCrawlingStatus()
+        ];
+        
+        if (this.currentPage === 'organizations') {
+            promises.push(this.loadOrganizations());
+        }
+        
+        await Promise.allSettled(promises);
+    }
+
+    async loadDashboardStats() {
+        try {
+            console.log('🔄 대시보드 통계 로드 시작');
+            const response = await fetch('/api/statistics');
+            
+            if (!response.ok) {
+                throw new Error(`API 오류: ${response.status}`);
             }
-        })
-        .catch(error => console.error('결과 업데이트 실패:', error));
-}
-
-// 한국 전화번호 검증 함수
-function isValidKoreanPhoneNumber(phoneNumber) {
-    if (!phoneNumber) return false;
-    
-    const number = phoneNumber.replace(/[^\d]/g, '');
-    
-    const validPrefixes = {
-        '02': { minLength: 9, maxLength: 10, area: '서울' },
-        '031': { minLength: 10, maxLength: 11, area: '경기' },
-        '032': { minLength: 10, maxLength: 11, area: '인천' },
-        '033': { minLength: 10, maxLength: 11, area: '강원' },
-        '041': { minLength: 10, maxLength: 11, area: '충남' },
-        '042': { minLength: 10, maxLength: 11, area: '대전' },
-        '043': { minLength: 10, maxLength: 11, area: '충북' },
-        '051': { minLength: 10, maxLength: 11, area: '부산' },
-        '052': { minLength: 10, maxLength: 11, area: '울산' },
-        '053': { minLength: 10, maxLength: 11, area: '대구' },
-        '054': { minLength: 10, maxLength: 11, area: '경북' },
-        '055': { minLength: 10, maxLength: 11, area: '경남' },
-        '061': { minLength: 10, maxLength: 11, area: '전남' },
-        '062': { minLength: 10, maxLength: 11, area: '광주' },
-        '063': { minLength: 10, maxLength: 11, area: '전북' },
-        '064': { minLength: 10, maxLength: 11, area: '제주' },
-        '070': { minLength: 11, maxLength: 11, area: '인터넷전화' },
-        '010': { minLength: 11, maxLength: 11, area: '핸드폰' },
-        '017': { minLength: 11, maxLength: 11, area: '핸드폰' }
-    };
-    
-    for (const [prefix, rules] of Object.entries(validPrefixes)) {
-        if (number.startsWith(prefix)) {
-            return number.length >= rules.minLength && number.length <= rules.maxLength;
+            
+            const data = await response.json();
+            console.log('🔄 API 데이터:', data);
+            
+            if (data.status === 'success') {
+                this.dashboardStats = data.data;
+            } else {
+                throw new Error('API 응답 상태가 success가 아님');
+            }
+        } catch (error) {
+            console.error('❌ 대시보드 통계 로드 실패:', error);
+            
+            // 기본값 설정
+            this.dashboardStats = {
+                total_organizations: 0,
+                total_users: 0,
+                recent_activities: 0,
+                crawling_jobs: 0
+            };
+            console.log('📝 기본 통계값 설정됨');
         }
     }
-    
-    return false;
-}
 
-// 지역 정보 추출 함수
-function getAreaInfo(phoneNumber) {
-    if (!phoneNumber) return null;
-    
-    const number = phoneNumber.replace(/[^\d]/g, '');
-    const areaMap = {
-        '02': '서울', '031': '경기', '032': '인천', '033': '강원',
-        '041': '충남', '042': '대전', '043': '충북',
-        '051': '부산', '052': '울산', '053': '대구', '054': '경북', '055': '경남',
-        '061': '전남', '062': '광주', '063': '전북', '064': '제주',
-        '070': '인터넷전화', '010': '핸드폰', '017': '핸드폰'
-    };
-    
-    for (const [prefix, area] of Object.entries(areaMap)) {
-        if (number.startsWith(prefix)) {
-            return { code: prefix, area: area };
+    async loadOrganizations(resetPage = false) {
+        try {
+            if (resetPage) this.filters.page = 1;
+            
+            const params = new URLSearchParams({
+                page: this.filters.page,
+                per_page: this.filters.perPage
+            });
+            
+            if (this.filters.search) params.append('search', this.filters.search);
+            if (this.filters.category) params.append('category', this.filters.category);
+            if (this.filters.status) params.append('status', this.filters.status);
+            
+            const response = await fetch(`/api/organizations?${params}`);
+            const data = await response.json();
+            
+            if (response.ok) {
+                this.organizations = data.organizations || [];
+                this.pagination = data.pagination || {};
+                UI.renderOrganizationsList(this.organizations, this.pagination);
+            } else {
+                throw new Error(data.message || '기관 목록 로드 실패');
+            }
+        } catch (error) {
+            console.error('기관 목록 로드 실패:', error);
+            UI.showError('기관 목록을 불러올 수 없습니다.');
         }
     }
-    
+
+    async getOrganizationDetail(id) {
+        try {
+            const response = await fetch(`/api/organizations/${id}`);
+            const data = await response.json();
+            
+            if (response.ok) {
+                return data.organization;
+            } else {
+                throw new Error(data.message || '기관 정보 로드 실패');
+            }
+        } catch (error) {
+            console.error('기관 상세 정보 로드 실패:', error);
+            UI.showError('기관 정보를 불러올 수 없습니다.');
     return null;
 }
-
-// 실시간 결과 표시 (엑셀 형식)
-function displayRealtimeResults(results) {
-    const resultsDiv = document.getElementById('realtimeResults');
-    
-    if (!results || results.length === 0) {
-        resultsDiv.innerHTML = '<div class="loading">크롤링 결과가 없습니다.</div>';
-        return;
     }
 
-    let html = `
-        <table class="excel-table" id="dataTable">
-            <thead>
-                <tr>
-                    <th>번호</th>
-                    <th class="name-col">기관명</th>
-                    <th class="category-col">카테고리</th>
-                    <th class="phone-col">전화번호 (구글)</th>
-                    <th class="fax-col">팩스번호 (구글)</th>
-                    <th class="status-col">상태</th>
-                    <th class="area-col">지역정보</th>
-                </tr>
-            </thead>
-            <tbody>
-    `;
-    
-    results.forEach((item, index) => {
-        const phoneGoogle = item.phone_google || '';
-        const faxGoogle = item.fax_google || '';
-        let status = '';
-        let areaInfo = '';
-        
-        // 전화번호 유효성 검증
-        const isPhoneValid = isValidKoreanPhoneNumber(phoneGoogle);
-        const isFaxValid = isValidKoreanPhoneNumber(faxGoogle);
-        
-        if (phoneGoogle && faxGoogle) {
-            if (faxGoogle === '전화번호와 일치') {
-                status = '📞📠 완전일치';
-                const phoneArea = getAreaInfo(phoneGoogle);
-                areaInfo = phoneArea ? `${phoneArea.area}(${phoneArea.code})` : '';
+    async updateOrganization(id, updates) {
+        try {
+            const response = await fetch(`/api/organizations/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updates)
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                UI.showSuccess('기관 정보가 업데이트되었습니다.');
+                await this.loadOrganizations();
+                return true;
             } else {
-                // 유사 패턴 감지 (앞자리 같고 뒷자리 다름)
-                const phoneDigits = phoneGoogle.replace(/[^\d]/g, '');
-                const faxDigits = faxGoogle.replace(/[^\d]/g, '');
+                throw new Error(data.message || '업데이트 실패');
+            }
+        } catch (error) {
+            console.error('기관 업데이트 실패:', error);
+            UI.showError('기관 정보 업데이트에 실패했습니다.');
+            return false;
+        }
+    }
+
+    async deleteOrganization(id) {
+        if (!confirm('정말로 이 기관을 삭제하시겠습니까?')) return false;
+        
+        try {
+            const response = await fetch(`/api/organizations/${id}`, {
+                method: 'DELETE'
+            });
+            
+            if (response.ok) {
+                UI.showSuccess('기관이 삭제되었습니다.');
+                await this.loadOrganizations();
+                return true;
+            } else {
+                throw new Error('삭제 실패');
+            }
+        } catch (error) {
+            console.error('기관 삭제 실패:', error);
+            UI.showError('기관 삭제에 실패했습니다.');
+            return false;
+        }
+    }
+
+    // ===== 크롤링 관련 =====
+    async startCrawling(config) {
+        try {
+            const response = await fetch('/api/start-enhanced-crawling', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                this.crawlingStatus = {
+                    jobId: data.job_id,
+                    isRunning: true,
+                    startTime: new Date()
+                };
                 
-                if (phoneDigits.length === faxDigits.length && phoneDigits.length >= 10) {
-                    const prefixLength = phoneDigits.length === 10 ? 6 : 7;
-                    if (phoneDigits.substring(0, prefixLength) === faxDigits.substring(0, prefixLength)) {
-                        status = '📞📠 유사패턴';
+                this.startCrawlingMonitoring();
+                UI.showSuccess('크롤링이 시작되었습니다!');
+                UI.updateCrawlingControls(true);
+                
+                return true;
+            } else {
+                throw new Error(data.detail || '크롤링 시작 실패');
+            }
+        } catch (error) {
+            console.error('크롤링 시작 실패:', error);
+            UI.showError('크롤링을 시작할 수 없습니다.');
+            return false;
+        }
+    }
+
+    async stopCrawling() {
+        try {
+            const response = await fetch('/api/stop-crawling', {
+                method: 'POST'
+            });
+            
+            if (response.ok) {
+                this.stopCrawlingMonitoring();
+                this.crawlingStatus = null;
+                UI.showSuccess('크롤링이 중지되었습니다.');
+                UI.updateCrawlingControls(false);
+                return true;
+            }
+        } catch (error) {
+            console.error('크롤링 중지 실패:', error);
+            UI.showError('크롤링 중지에 실패했습니다.');
+            return false;
+        }
+    }
+
+    async checkCrawlingStatus() {
+        try {
+            const response = await fetch('/api/progress');
+            const data = await response.json();
+            
+            if (data.status && data.status !== 'idle') {
+                this.crawlingStatus = {
+                    isRunning: true,
+                    progress: data
+                };
+                this.startCrawlingMonitoring();
+                UI.updateCrawlingControls(true);
+            } else {
+                this.crawlingStatus = null;
+                UI.updateCrawlingControls(false);
+            }
+            
+            return data;
+        } catch (error) {
+            console.error('크롤링 상태 확인 실패:', error);
+            return null;
+        }
+    }
+
+    startCrawlingMonitoring() {
+        if (this.intervals.crawling) return;
+        
+        this.intervals.crawling = setInterval(async () => {
+            try {
+                const progress = await fetch('/api/progress').then(r => r.json());
+                const results = await fetch('/api/real-time-results?limit=5').then(r => r.json());
+                
+                if (progress.status === 'completed' || progress.status === 'error') {
+                    this.stopCrawlingMonitoring();
+                    this.crawlingStatus = null;
+                    UI.updateCrawlingControls(false);
+                    
+                    if (progress.status === 'completed') {
+                        UI.showSuccess('크롤링이 완료되었습니다!');
+                        await this.loadDashboardStats(); // 통계 갱신
                     } else {
-                        status = '📞📠 별도';
+                        UI.showError('크롤링 중 오류가 발생했습니다.');
                     }
                 } else {
-                    status = '📞📠 별도';
+                    this.crawlingStatus.progress = progress;
+                    UI.updateCrawlingProgress(progress, results.results || []);
                 }
-                
-                const phoneArea = getAreaInfo(phoneGoogle);
-                const faxArea = getAreaInfo(faxGoogle);
-                if (phoneArea && faxArea) {
-                    areaInfo = phoneArea.area === faxArea.area ? 
-                        `${phoneArea.area}(${phoneArea.code})` : 
-                        `📞${phoneArea.area} 📠${faxArea.area}`;
-                } else if (phoneArea) {
-                    areaInfo = `📞${phoneArea.area}(${phoneArea.code})`;
-                } else if (faxArea) {
-                    areaInfo = `📠${faxArea.area}(${faxArea.code})`;
-                }
+            } catch (error) {
+                console.error('크롤링 모니터링 오류:', error);
             }
-        } else if (phoneGoogle) {
-            status = isPhoneValid ? '📞 전화만' : '📞 전화만(무효)';
-            const phoneArea = getAreaInfo(phoneGoogle);
-            areaInfo = phoneArea ? `${phoneArea.area}(${phoneArea.code})` : '알 수 없음';
-        } else if (faxGoogle) {
-            status = isFaxValid ? '📠 팩스만' : '📠 팩스만(무효)';
-            const faxArea = getAreaInfo(faxGoogle);
-            areaInfo = faxArea ? `${faxArea.area}(${faxArea.code})` : '알 수 없음';
-        } else {
-            status = '❌ 없음';
-            areaInfo = '';
+        }, 2000);
+    }
+
+    stopCrawlingMonitoring() {
+        if (this.intervals.crawling) {
+            clearInterval(this.intervals.crawling);
+            this.intervals.crawling = null;
+        }
+    }
+
+    // ===== 페이지 네비게이션 =====
+    async navigateTo(page) {
+        if (this.currentPage === page) return;
+        
+        this.currentPage = page;
+        
+        // 페이지별 데이터 로드
+        switch(page) {
+            case 'dashboard':
+                await this.loadDashboardStats();
+                break;
+            case 'organizations':
+                await this.loadOrganizations();
+                break;
+            case 'crawling':
+                await this.checkCrawlingStatus();
+                break;
         }
         
-        // 유효하지 않은 번호는 스타일 변경
-        const rowClass = (!isPhoneValid && phoneGoogle) || (!isFaxValid && faxGoogle) ? 
-            'result-row invalid-number' : 'result-row';
-        
-        html += `
-            <tr onclick="toggleRowSelection(this)" data-index="${index}" class="${rowClass}">
-                <td>${index + 1}</td>
-                <td class="name-col">${item.name || ''}</td>
-                <td class="category-col">${item.category || ''}</td>
-                <td class="phone-col">${phoneGoogle}</td>
-                <td class="fax-col">${faxGoogle}</td>
-                <td class="status-col">${status}</td>
-                <td class="area-col">${areaInfo}</td>
-            </tr>
-        `;
-    });
-    
-    html += `
-            </tbody>
-        </table>
-    `;
-    
-    resultsDiv.innerHTML = html;
-    
-    // 테이블을 맨 아래로 스크롤 (최신 결과 보이도록)
-    resultsDiv.scrollTop = resultsDiv.scrollHeight;
-}
-
-// 🆕 추가: 크롤링 시작 시 실시간 모니터링 시작
-function startCrawling() {
-    const testMode = document.getElementById('testMode')?.checked || false;
-    const testCount = parseInt(document.getElementById('testCount')?.value || '10');
-    const useAi = document.getElementById('useAi')?.checked || true;
-    
-    const config = {
-        mode: 'enhanced',
-        test_mode: testMode,
-        test_count: testCount,
-        use_ai: useAi
-    };
-
-    fetch('/api/start-crawling', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(config)
-    })
-    .then(response => response.json())
-    .then(data => {
-        console.log('크롤링 시작:', data);
-        updateStatus('크롤링이 시작되었습니다...');
-        
-        // 🆕 추가: 실시간 모니터링 시작
-        startRealTimeMonitoring();
-    })
-    .catch(error => {
-        console.error('크롤링 시작 실패:', error);
-        updateStatus('크롤링 시작에 실패했습니다.');
-    });
-}
-
-// 🆕 추가: 실시간 모니터링 함수
-function startRealTimeMonitoring() {
-    if (isRealTimeMonitoringActive) {
-        return; // 이미 실행 중이면 중복 실행 방지
+        UI.renderCurrentPage(this);
     }
-    
-    isRealTimeMonitoringActive = true;
-    
-    // 결과 컨테이너 생성
-    createResultsContainer();
-    
-    // 진행 상황 폴링 시작 (3초마다)
-    progressInterval = setInterval(updateProgress, 3000);
-    
-    console.log('실시간 모니터링 시작');
+
+    // ===== 검색 및 필터 =====
+    updateFilters(newFilters) {
+        this.filters = { ...this.filters, ...newFilters };
+        this.loadOrganizations(true);
+    }
+
+    resetFilters() {
+        this.filters = {
+            search: '',
+            category: '',
+            status: '',
+            page: 1,
+            perPage: 20
+        };
+        this.loadOrganizations(true);
+    }
+
+    // ===== 백그라운드 작업 =====
+    startBackgroundTasks() {
+        // 대시보드 자동 갱신 (5분마다)
+        this.intervals.dashboard = setInterval(() => {
+            if (this.currentPage === 'dashboard') {
+                this.loadDashboardStats();
+            }
+        }, 5 * 60 * 1000);
+    }
+
+    // ===== 정리 =====
+    destroy() {
+        Object.values(this.intervals).forEach(interval => {
+            if (interval) clearInterval(interval);
+        });
+    }
 }
 
-// 🆕 추가: 실시간 결과 컨테이너 생성
-function createResultsContainer() {
-    const existingContainer = document.getElementById('real-time-results');
-    if (existingContainer) {
-        existingContainer.remove();
+// ===== 전역 유틸리티 함수들 =====
+
+const Utils = {
+    // 날짜 포맷팅
+    formatDate(date) {
+        if (!date) return '-';
+        return new Date(date).toLocaleString('ko-KR');
+    },
+
+    // 숫자 포맷팅
+    formatNumber(num) {
+        if (!num) return '0';
+        return num.toLocaleString('ko-KR');
+    },
+
+    // 상태 클래스 반환
+    getStatusClass(status) {
+        const classes = {
+            '신규': 'bg-gray-100 text-gray-800',
+            '접촉완료': 'bg-blue-100 text-blue-800', 
+            '관심있음': 'bg-yellow-100 text-yellow-800',
+            '협상중': 'bg-orange-100 text-orange-800',
+            '성사': 'bg-green-100 text-green-800',
+            '실패': 'bg-red-100 text-red-800'
+        };
+        return classes[status] || 'bg-gray-100 text-gray-800';
+    },
+
+    // 디바운스
+    debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    },
+
+    // 페이지네이션 계산
+    calculatePagination(current, total, visiblePages = 5) {
+        const half = Math.floor(visiblePages / 2);
+        let start = Math.max(current - half, 1);
+        let end = Math.min(start + visiblePages - 1, total);
+        
+        if (end - start + 1 < visiblePages) {
+            start = Math.max(end - visiblePages + 1, 1);
+        }
+        
+        return { start, end };
     }
+};
+
+// ===== 전역 인스턴스 생성 =====
+let crmSystem;
+
+// ===== 초기화 =====
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('🔄 DOM 로드 완료');
     
-    const container = document.createElement('div');
-    container.id = 'real-time-results';
-    container.innerHTML = `
-        <h3>📊 실시간 크롤링 결과</h3>
-        <div id="progress-section">
-            <div id="progress-bar-container">
-                <div class="progress-bar">
-                    <div id="progress-fill" class="progress-fill"></div>
-                    <span id="progress-text">0%</span>
+    try {
+        console.log('🔄 UI 객체 확인:', typeof UI);
+        if (typeof UI === 'undefined') {
+            throw new Error('UI 객체가 정의되지 않았습니다');
+        }
+        
+        console.log('🔄 CRMSystem 인스턴스 생성');
+        crmSystem = new CRMSystem();
+        
+        console.log('🔄 시스템 초기화 시작');
+        await crmSystem.init();
+        
+        console.log('✅ 시스템 초기화 완료');
+    } catch (error) {
+        console.error('❌ CRM 시스템 초기화 실패:', error);
+        document.getElementById('app-root').innerHTML = `
+            <div class="h-screen flex items-center justify-center bg-red-50">
+                <div class="text-center">
+                    <i class="fas fa-exclamation-triangle text-6xl text-red-500 mb-4"></i>
+                    <h1 class="text-2xl font-bold text-red-800 mb-2">시스템 오류</h1>
+                    <p class="text-red-600 mb-4">CRM 시스템을 시작할 수 없습니다.</p>
+                    <p class="text-red-500 mb-4 text-sm">오류: ${error.message}</p>
+                    <button onclick="window.location.reload()" 
+                            class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded">
+                        다시 시도
+                    </button>
                 </div>
             </div>
-            <div id="current-organization">현재 처리 중: -</div>
-            <div id="current-step">단계: 대기 중</div>
-            <div id="stats-summary">
-                <span id="completed-count">완료: 0</span> | 
-                <span id="failed-count">실패: 0</span> | 
-                <span id="total-count">전체: 0</span>
-            </div>
-        </div>
-        <div id="results-table-container">
-            <h4>최근 처리 결과 (최신 20개)</h4>
-            <table id="results-table">
-                <thead>
-                    <tr>
-                        <th>기관명</th>
-                        <th>분류</th>
-                        <th>전화번호</th>
-                        <th>팩스</th>
-                        <th>이메일</th>
-                        <th>우편번호</th>
-                        <th>주소</th>
-                        <th>홈페이지</th>
-                        <th>상태</th>
-                        <th>단계</th>
-                        <th>처리시간</th>
-                    </tr>
-                </thead>
-                <tbody id="results-tbody">
-                </tbody>
-            </table>
-        </div>
-    `;
-    
-    // 메인 컨텐츠 영역에 추가
-    const mainContent = document.querySelector('main') || document.body;
-    mainContent.appendChild(container);
-    
-    resultsContainer = container;
-}
-
-// 🆕 추가: 진행 상황 업데이트
-async function updateProgress() {
-    try {
-        const response = await fetch('/api/all-real-time-results');
-        const data = await response.json();
-        
-        // 진행률 업데이트
-        const progress = data.progress;
-        updateProgressBar(progress);
-        
-        // 통계 업데이트
-        updateStatsSummary(data);
-        
-        // 최신 결과들을 테이블에 추가
-        if (data.results && data.results.length > 0) {
-            updateResultsTable(data.results);
-        }
-        
-        // 크롤링 완료 시 폴링 중지
-        if (progress.status === 'completed' || progress.status === 'stopped' || progress.status === 'error') {
-            stopRealTimeMonitoring();
-            updateStatus(`크롤링 ${getStatusText(progress.status)}`);
-        }
-        
-    } catch (error) {
-        console.error('진행 상황 업데이트 실패:', error);
+        `;
     }
-}
-
-// 🆕 추가: 진행률 바 업데이트
-function updateProgressBar(progress) {
-    const progressFill = document.getElementById('progress-fill');
-    const progressText = document.getElementById('progress-text');
-    const currentOrg = document.getElementById('current-organization');
-    const currentStep = document.getElementById('current-step');
-    
-    if (progressFill && progressText) {
-        const percentage = Math.round(progress.percentage || 0);
-        progressFill.style.width = `${percentage}%`;
-        progressText.textContent = `${percentage}% (${progress.current_index}/${progress.total_count})`;
-    }
-    
-    if (currentOrg) {
-        currentOrg.textContent = `현재 처리 중: ${progress.current_organization || '-'}`;
-    }
-    
-    if (currentStep && progress.latest_result) {
-        currentStep.textContent = `단계: ${progress.latest_result.current_step || '처리 중'}`;
-    }
-}
-
-// 🆕 추가: 통계 요약 업데이트
-function updateStatsSummary(data) {
-    const completedCount = document.getElementById('completed-count');
-    const failedCount = document.getElementById('failed-count');
-    const totalCount = document.getElementById('total-count');
-    
-    if (completedCount) {
-        completedCount.textContent = `완료: ${data.completed_count || 0}`;
-    }
-    
-    if (failedCount) {
-        failedCount.textContent = `실패: ${data.failed_count || 0}`;
-    }
-    
-    if (totalCount) {
-        totalCount.textContent = `전체: ${data.total_count || 0}`;
-    }
-}
-
-// 🆕 추가: 결과 테이블 업데이트
-function updateResultsTable(results) {
-    const tbody = document.getElementById('results-tbody');
-    if (!tbody) return;
-    
-    // 최신 20개만 표시
-    const latestResults = results.slice(-20).reverse();
-    
-    // 테이블 내용 완전히 새로 고침 (중복 방지)
-    tbody.innerHTML = '';
-    
-    latestResults.forEach(result => {
-        addResultToTable(result, tbody);
-    });
-}
-
-// 🆕 추가: 결과를 테이블에 추가
-function addResultToTable(result, tbody) {
-    const row = document.createElement('tr');
-    row.className = `result-row status-${result.status}`;
-    
-    // 홈페이지 URL 링크 처리
-    const homepageLink = result.homepage_url ? 
-        `<a href="${result.homepage_url}" target="_blank" title="${result.homepage_url}">링크</a>` : 
-        '-';
-    
-    // 주소 길이 제한 (30자)
-    const shortAddress = result.address && result.address.length > 30 ? 
-        result.address.substring(0, 30) + '...' : 
-        result.address || '-';
-    
-    row.innerHTML = `
-        <td><strong>${result.name}</strong></td>
-        <td>${result.category}</td>
-        <td>${result.phone || '-'}</td>
-        <td>${result.fax || '-'}</td>
-        <td>${result.email || '-'}</td>
-        <td>${result.postal_code || '-'}</td>
-        <td title="${result.address || ''}">${shortAddress}</td>
-        <td>${homepageLink}</td>
-        <td><span class="status-badge status-${result.status}">${getStatusText(result.status)}</span></td>
-        <td class="step-cell">${result.current_step || '-'}</td>
-        <td>${result.processing_time || '-'}</td>
-    `;
-    
-    tbody.appendChild(row);
-}
-
-// 🆕 추가: 상태 텍스트 변환
-function getStatusText(status) {
-    switch (status) {
-        case 'completed': return '완료';
-        case 'failed': return '실패';
-        case 'processing': return '처리중';
-        case 'stopped': return '중지됨';
-        case 'error': return '오류';
-        case 'idle': return '대기';
-        case 'running': return '실행중';
-        default: return status || '알 수 없음';
-    }
-}
-
-// 🆕 추가: 실시간 모니터링 중지
-function stopRealTimeMonitoring() {
-    if (progressInterval) {
-        clearInterval(progressInterval);
-        progressInterval = null;
-    }
-    
-    isRealTimeMonitoringActive = false;
-    console.log('실시간 모니터링 중지');
-}
-
-// 🔧 수정: 크롤링 중지 함수 개선
-function stopCrawling() {
-    fetch('/api/stop-crawling', {
-        method: 'POST'
-    })
-    .then(response => response.json())
-    .then(data => {
-        console.log('크롤링 중지:', data);
-        updateStatus('크롤링이 중지되었습니다.');
-        stopRealTimeMonitoring();
-    })
-    .catch(error => {
-        console.error('크롤링 중지 실패:', error);
-        updateStatus('크롤링 중지에 실패했습니다.');
-    });
-}
-
-// 행 선택 기능
-function toggleRowSelection(row) {
-    row.classList.toggle('selected');
-    if (row.classList.contains('selected')) {
-        row.style.backgroundColor = '#007bff';
-        row.style.color = 'white';
-    } else {
-        row.style.backgroundColor = '';
-        row.style.color = '';
-    }
-}
-
-// 전체 행 선택
-function selectAllRows() {
-    const rows = document.querySelectorAll('#dataTable tbody tr');
-    rows.forEach(row => {
-        if (!row.classList.contains('selected')) {
-            toggleRowSelection(row);
-        }
-    });
-}
-
-// 테이블 데이터 복사 (전체)
-function copyTableData() {
-    const table = document.getElementById('dataTable');
-    if (!table) {
-        showAlert('복사할 데이터가 없습니다.', 'warning');
-        return;
-    }
-
-    let copyText = '';
-    const rows = table.querySelectorAll('tbody tr');
-    
-    rows.forEach(row => {
-        const cells = row.querySelectorAll('td');
-        const rowData = [];
-        // 번호 컬럼 제외하고 복사
-        for (let i = 1; i < cells.length; i++) {
-            rowData.push(cells[i].textContent.trim());
-        }
-        copyText += rowData.join('\t') + '\n';
-    });
-
-    copyToClipboard(copyText);
-    showAlert('전체 데이터가 클립보드에 복사되었습니다.', 'success');
-}
-
-// 선택된 행 복사
-function copySelectedRows() {
-    const selectedRows = document.querySelectorAll('#dataTable tbody tr.selected');
-    if (selectedRows.length === 0) {
-        showAlert('선택된 행이 없습니다.', 'warning');
-        return;
-    }
-
-    let copyText = '';
-    selectedRows.forEach(row => {
-        const cells = row.querySelectorAll('td');
-        const rowData = [];
-        // 번호 컬럼 제외하고 복사
-        for (let i = 1; i < cells.length; i++) {
-            rowData.push(cells[i].textContent.trim());
-        }
-        copyText += rowData.join('\t') + '\n';
-    });
-
-    copyToClipboard(copyText);
-    showAlert(`${selectedRows.length}개 행이 클립보드에 복사되었습니다.`, 'success');
-}
-
-// 클립보드에 복사
-function copyToClipboard(text) {
-    if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(text);
-    } else {
-        // 폴백 방법
-        const textArea = document.createElement('textarea');
-        textArea.value = text;
-        textArea.style.position = 'fixed';
-        textArea.style.left = '-999999px';
-        textArea.style.top = '-999999px';
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        document.execCommand('copy');
-        textArea.remove();
-    }
-}
-
-// 🆕 추가: 페이지 로드 시 초기화
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('크롤링 제어 시스템 로드 완료');
-    
-    // 기존 크롤링이 진행 중인지 확인
-    fetch('/api/progress')
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'running') {
-                console.log('진행 중인 크롤링 발견, 실시간 모니터링 시작');
-                startRealTimeMonitoring();
-            }
-        })
-        .catch(error => {
-            console.log('진행 상황 확인 실패:', error);
-        });
 });
 
-// 🆕 추가: 페이지 언로드 시 정리
-window.addEventListener('beforeunload', function() {
-    stopRealTimeMonitoring();
+// 페이지 언로드시 정리
+window.addEventListener('beforeunload', () => {
+    if (crmSystem) {
+        crmSystem.destroy();
+    }
 }); 

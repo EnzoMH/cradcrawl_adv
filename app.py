@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-웹 기반 크롤링 제어 시스템
-FastAPI + HTML/CSS/JS를 활용한 크롤링 결과 확인 및 제어
+웹 기반 크롤링 제어 시스템 - DB 기반
+FastAPI + SQLite를 활용한 크롤링 결과 관리
 """
 
 from fastapi import FastAPI, Request, HTTPException
@@ -12,162 +12,113 @@ from fastapi.templating import Jinja2Templates
 import json
 import asyncio
 import threading
-import time
 import logging
 from datetime import datetime
-from typing import List, Dict, Optional
+from typing import Optional
 import uvicorn
-from pydantic import BaseModel
 
 import os
 from dotenv import load_dotenv
 load_dotenv()
 print(f"🔑 .env 로드 완료: GEMINI_API_KEY={'설정됨' if os.getenv('GEMINI_API_KEY') else '없음'}")
 
-# ✅ 수정: enhanced_detail_extractor 사용
-from crawler_main import CrawlerMain
-# 통계 분석은 기존 사용
-
-from legacy.data_statistics import DataStatisticsAnalyzer
-
-# ✅ 수정: 유틸리티 활용
+# 필요한 모듈들
+from crawler_main import UnifiedCrawler
+# from legacy.data_statistics import DataStatisticsAnalyzer
 from utils.logger_utils import LoggerUtils
 from utils.file_utils import FileUtils
+from database.database import get_database
 
-# 🆕 추가: 실시간 크롤링 결과 모델
-class CrawlingResult(BaseModel):
-    """실시간 크롤링 결과 모델"""
-    name: str
-    category: str = ""
-    phone: str = ""
-    fax: str = ""
-    email: str = ""
-    postal_code: str = ""
-    address: str = ""
-    homepage_url: str = ""
-    status: str = "processing"  # processing, completed, failed
-    processed_at: str = ""
-    error_message: str = ""
-    current_step: str = ""
-    processing_time: str = ""
-    extraction_method: str = ""
-
-class CrawlingProgress(BaseModel):
-    """크롤링 진행 상황 모델"""
-    current_index: int
-    total_count: int
-    current_organization: str
-    percentage: float
-    latest_result: Optional[CrawlingResult] = None
-    status: str = "idle"  # idle, running, completed, stopped, error
-
-class CrawlingConfig(BaseModel):
-    mode: str = "enhanced"  # "enhanced" 또는 "legacy"
-    test_mode: bool = False
-    test_count: int = 10
-    use_ai: bool = True
-
-# 로거 인스턴스 생성 (✅ 수정: LoggerUtils 활용)
+# 전역 변수
+db = get_database()  # ✅ DB 인스턴스 초기화
+current_crawling_job_id: Optional[int] = None
+extractor_instance = None
+total_organizations = []
+current_data_file = None
 logger = LoggerUtils.setup_app_logger()
 
-app = FastAPI(title="향상된 크롤링 제어 시스템")
+app = FastAPI(title="DB 기반 크롤링 시스템", version="2.0.0")
 
 # 정적 파일 및 템플릿 설정
 app.mount("/static/css", StaticFiles(directory="templates/css"), name="css")
 app.mount("/static/js", StaticFiles(directory="templates/js"), name="js")
 templates = Jinja2Templates(directory="templates/html")
 
-# 기타 정적 파일들 (다운로드 파일 등)을 위한 static 디렉토리
 if os.path.exists("static"):
     app.mount("/static/files", StaticFiles(directory="static"), name="files")
 
-# 🔧 수정: 전역 변수 개선
-extractor_instance = None  # Enhanced Detail Extractor 인스턴스
-total_organizations = []
-crawling_results = []  # 기존 결과 저장 (하위 호환성)
-current_data_file = None  # 현재 사용 중인 데이터 파일
-
-# 🆕 추가: 실시간 진행 상황 관리
-crawling_progress = CrawlingProgress(
-    current_index=0,
-    total_count=0,
-    current_organization="",
-    percentage=0.0,
-    status="idle"
-)
-real_time_results = []  # 실시간 결과 저장
-
-# 기존 crawling_status (하위 호환성 유지)
-crawling_status = {
-    "is_running": False,
-    "processed_count": 0,
-    "total_count": 0,
-    "current_organization": "",
-    "extraction_mode": "enhanced"
-}
-
+# progress_callback 함수
 def progress_callback(result: dict):
-    """🆕 추가: 진행 상황 콜백 함수"""
-    global crawling_progress, real_time_results, crawling_status
+    """DB 기반 진행 상황 콜백 함수"""
+    global current_crawling_job_id
+    
+    if not current_crawling_job_id:
+        logger.error("크롤링 작업 ID가 없습니다.")
+        return
     
     try:
-        # 실시간 결과에 추가
-        crawling_result = CrawlingResult(**result)
+        # DB에 결과 저장
+        result_data = {
+            'job_id': current_crawling_job_id,
+            'organization_name': result.get('name', ''),
+            'category': result.get('category', ''),
+            'homepage_url': result.get('homepage_url', ''),
+            'status': result.get('status', 'PROCESSING'),
+            'current_step': result.get('current_step', ''),
+            'processing_time': result.get('processing_time', 0),
+            'extraction_method': result.get('extraction_method', ''),
+            'phone': result.get('phone', ''),
+            'fax': result.get('fax', ''),
+            'email': result.get('email', ''),
+            'mobile': result.get('mobile', ''),
+            'address': result.get('address', ''),
+            'crawling_details': {
+                'homepage_parsed': result.get('homepage_parsed'),
+                'ai_summary': result.get('ai_summary'),
+                'meta_info': result.get('meta_info'),
+                'contact_info_extracted': result.get('contact_info_extracted')
+            },
+            'error_message': result.get('error_message', '')
+        }
         
-        # 기존 결과가 있으면 업데이트, 없으면 추가
-        existing_index = -1
-        for i, existing_result in enumerate(real_time_results):
-            if existing_result.name == crawling_result.name:
-                existing_index = i
-                break
+        db.add_crawling_result(result_data)
         
-        if existing_index >= 0:
-            real_time_results[existing_index] = crawling_result
-        else:
-            real_time_results.append(crawling_result)
+        # 작업 진행 상황 업데이트
+        if result.get('status') == 'completed':
+            progress = db.get_crawling_progress(current_crawling_job_id)
+            completed_count = progress['processed_count'] + 1
+            
+            db.update_crawling_job(current_crawling_job_id, {
+                'processed_count': completed_count
+            })
         
-        # 완료된 기관만 카운트
-        if result.get("status") == "completed":
-            crawling_progress.current_index = len([r for r in real_time_results if r.status == "completed"])
-        
-        # 진행 상황 업데이트
-        crawling_progress.current_organization = result.get("name", "")
-        crawling_progress.percentage = (crawling_progress.current_index / crawling_progress.total_count) * 100 if crawling_progress.total_count > 0 else 0
-        crawling_progress.latest_result = crawling_result
-        
-        # 기존 crawling_status도 업데이트 (하위 호환성)
-        crawling_status["processed_count"] = crawling_progress.current_index
-        crawling_status["current_organization"] = result.get("name", "")
-        
-        logger.info(f"실시간 업데이트: {result.get('name')} - {result.get('status')} - {result.get('current_step', '')}")
+        logger.info(f"DB 저장 완료: {result.get('name')} - {result.get('status')}")
         
     except Exception as e:
-        logger.error(f"진행 상황 콜백 오류: {e}")
+        logger.error(f"크롤링 결과 DB 저장 실패: {e}")
 
+# 웹 페이지 라우트
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     """메인 페이지"""
     logger.info("메인 페이지 요청")
     return templates.TemplateResponse("index.html", {"request": request})
 
-@app.get("/api/status")
-async def get_status():
-    """크롤링 상태 조회 (기존 호환성)"""
-    logger.debug(f"상태 조회 요청: {crawling_status}")
-    return crawling_status
-
+# API 엔드포인트들
 @app.post("/api/start-enhanced-crawling")
-async def start_enhanced_crawling(config: CrawlingConfig):
-    """✅ 새로운: Enhanced Detail Extractor 크롤링 시작"""
-    global extractor_instance, total_organizations, crawling_status, crawling_results, crawling_progress, real_time_results, current_data_file
-    
-    logger.info(f"Enhanced 크롤링 시작 요청: {config}")
+async def start_enhanced_crawling(request: Request):
+    """DB 기반 Enhanced 크롤링 시작"""
+    global extractor_instance, total_organizations, current_crawling_job_id, current_data_file
     
     try:
-        # ✅ 수정: 데이터 파일 로드
-        logger.info("데이터 파일 로드 시작")
-        
-        # 파일 존재 확인 및 로드
+        config_data = await request.json()
+    except:
+        config_data = {"test_mode": False, "test_count": 10, "use_ai": True}
+    
+    logger.info(f"Enhanced 크롤링 시작 요청: {config_data}")
+    
+    try:
+        # 데이터 파일 로드
         if os.path.exists("raw_data_0530.json"):
             current_data_file = "raw_data_0530.json"
             data = FileUtils.load_json(current_data_file)
@@ -177,286 +128,264 @@ async def start_enhanced_crawling(config: CrawlingConfig):
         else:
             raise HTTPException(status_code=404, detail="raw_data.json 또는 raw_data_0530.json 파일을 찾을 수 없습니다.")
         
-        if not data:
-            raise HTTPException(status_code=500, detail="데이터 파일을 읽을 수 없습니다.")
-        
-        logger.info(f"사용할 데이터 파일: {current_data_file}")
-        
-        # 🔧 핵심 수정: 데이터 구조 자동 감지 및 처리
+        # 데이터 처리
         total_organizations = []
-        
         if isinstance(data, dict):
-            # Dictionary 구조: {"카테고리": [기관들]}
-            logger.info(f"Dictionary 구조 데이터 처리: {len(data)}개 카테고리")
             for category, orgs in data.items():
                 if isinstance(orgs, list):
                     for org in orgs:
                         if isinstance(org, dict):
                             org["category"] = category
                             total_organizations.append(org)
-                        
         elif isinstance(data, list):
-            # List 구조: [{"name": "기관", "category": "카테고리"}]
-            logger.info(f"List 구조 데이터 처리: {len(data)}개 기관")
             total_organizations = [org for org in data if isinstance(org, dict)]
-            
-        else:
-            raise ValueError("지원하지 않는 데이터 구조입니다. Dictionary 또는 List 형태여야 합니다.")
         
-        logger.info(f"총 {len(total_organizations)}개 기관 로드 완료")
+        # DB에 크롤링 작업 생성
+        job_data = {
+            'job_name': f"Enhanced Crawling {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            'total_count': config_data.get('test_count', 10) if config_data.get('test_mode', False) else len(total_organizations),
+            'started_by': 'SYSTEM',
+            'config': config_data
+        }
         
-        # 🔧 수정: Enhanced Detail Extractor 인스턴스 생성 (콜백 포함)
-        logger.info("Enhanced Detail Extractor 인스턴스 생성")
-        api_key = os.getenv('GEMINI_API_KEY') if config.use_ai else None
-        extractor_instance = CrawlerMain(
+        current_crawling_job_id = db.create_crawling_job(job_data)
+        logger.info(f"크롤링 작업 생성: ID {current_crawling_job_id}")
+        
+        # Enhanced Detail Extractor 인스턴스 생성
+        api_key = os.getenv('GEMINI_API_KEY') if config_data.get('use_ai', True) else None
+        extractor_instance = UnifiedCrawler(
             api_key=api_key, 
-            progress_callback=progress_callback  # 🆕 추가: 콜백 함수 전달
+            progress_callback=progress_callback
         )
         
-        # 🔧 수정: 진행 상황 초기화
-        real_time_results = []
-        crawling_progress = CrawlingProgress(
-            current_index=0,
-            total_count=len(total_organizations),
-            current_organization="",
-            percentage=0.0,
-            status="running"
-        )
+        # 백그라운드 실행
+        threading.Thread(target=run_enhanced_crawling_db, args=(config_data,), daemon=True).start()
         
-        # 상태 초기화 (기존 호환성)
-        crawling_results = []
-        crawling_status.update({
-            "is_running": True,
-            "processed_count": 0,
-            "total_count": len(total_organizations),
-            "current_organization": "",
-            "extraction_mode": "enhanced"
-        })
-        
-        logger.info(f"크롤링 상태 초기화 완료: 총 {len(total_organizations)}개 기관")
-        
-        # ✅ 수정: 백그라운드에서 Enhanced 크롤링 시작
-        logger.info("백그라운드 Enhanced 크롤링 스레드 시작")
-        threading.Thread(target=run_enhanced_crawling, args=(config,), daemon=True).start()
-        
-        logger.info("Enhanced 크롤링 시작 완료")
         return {
             "message": "Enhanced 크롤링이 시작되었습니다.", 
-            "total_count": len(total_organizations),
-            "mode": "enhanced",
-            "ai_enabled": config.use_ai
+            "job_id": current_crawling_job_id,
+            "total_count": job_data['total_count']
         }
         
     except Exception as e:
         logger.error(f"Enhanced 크롤링 시작 실패: {e}")
         raise HTTPException(status_code=500, detail=f"크롤링 시작 실패: {str(e)}")
 
-def run_enhanced_crawling(config: CrawlingConfig):
-    """✅ 새로운: Enhanced Detail Extractor 실행"""
-    global crawling_status, total_organizations, crawling_results, extractor_instance, crawling_progress, current_data_file
+def run_enhanced_crawling_db(config_data: dict):
+    """DB 기반 크롤링 실행"""
+    global current_crawling_job_id, extractor_instance, current_data_file
     
-    logger.info(f"Enhanced 크롤링 시작: 총기관수={len(total_organizations)}")
+    logger.info(f"DB 기반 Enhanced 크롤링 시작: Job ID {current_crawling_job_id}")
     
     try:
-        # 비동기 실행을 위한 이벤트 루프 생성
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
-        # 처리할 기관 수 결정
-        process_count = config.test_count if config.test_mode else len(total_organizations)
-        organizations_to_process = total_organizations[:process_count]
+        test_mode = config_data.get('test_mode', False)
+        test_count = config_data.get('test_count', 10)
         
-        # ✅ Enhanced Detail Extractor 비동기 실행
+        # 크롤링 실행
         results = loop.run_until_complete(
             extractor_instance.process_json_file_async(
-                json_file_path=current_data_file,  # 🔧 수정: 실제 파일명 사용
-                test_mode=config.test_mode,
-                test_count=config.test_count
+                json_file_path=current_data_file,
+                test_mode=test_mode,
+                test_count=test_count
             )
         )
         
-        if results:
-            crawling_results = results
-            
-            # ✅ 결과 자동 저장
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            json_file = f"enhanced_results_{timestamp}.json"
-            excel_file = f"enhanced_report_{timestamp}.xlsx"
-            
-            # JSON 저장
-            extractor_instance.save_merged_results_to_json(results, json_file)
-            
-            # Excel 저장
-            extractor_instance.create_final_excel_report(results, excel_file)
-            
-            logger.info(f"Enhanced 크롤링 완료: {len(results)}개 결과 저장")
+        # 작업 완료 처리
+        db.update_crawling_job(current_crawling_job_id, {
+            'status': 'COMPLETED',
+            'completed_at': datetime.now().isoformat()
+        })
         
-        # 크롤링 완료
-        crawling_status["is_running"] = False
-        crawling_status["current_organization"] = ""
-        crawling_progress.status = "completed"
-        
-        logger.info("Enhanced 크롤링 완료")
-        print("Enhanced 크롤링 완료")
+        logger.info(f"크롤링 완료: Job ID {current_crawling_job_id}")
         
     except Exception as e:
-        logger.error(f"Enhanced 크롤링 중 오류: {e}")
-        print(f"Enhanced 크롤링 중 오류: {e}")
-        crawling_status["is_running"] = False
-        crawling_status["current_organization"] = ""
-        crawling_progress.status = "error"
+        logger.error(f"크롤링 실행 실패: {e}")
+        
+        if current_crawling_job_id:
+            db.update_crawling_job(current_crawling_job_id, {
+                'status': 'ERROR',
+                'error_message': str(e),
+                'completed_at': datetime.now().isoformat()
+            })
 
-# 🆕 추가: 실시간 진행 상황 API
 @app.get("/api/progress")
 async def get_progress():
-    """실시간 크롤링 진행 상황 조회"""
-    return crawling_progress
+    """DB 기반 크롤링 진행 상황 조회"""
+    if not current_crawling_job_id:
+        return {"status": "idle", "message": "진행 중인 크롤링이 없습니다."}
+    
+    try:
+        progress = db.get_crawling_progress(current_crawling_job_id)
+        return progress
+    except Exception as e:
+        logger.error(f"진행 상황 조회 실패: {e}")
+        return {"status": "error", "message": str(e)}
 
-# 🆕 추가: 실시간 결과 API
 @app.get("/api/real-time-results")
 async def get_real_time_results(limit: int = 10):
-    """실시간 크롤링 결과 조회 (최신 N개)"""
-    return {
-        "results": real_time_results[-limit:] if real_time_results else [],
-        "total_count": len(real_time_results),
-        "progress": crawling_progress
-    }
+    """DB 기반 실시간 크롤링 결과 조회"""
+    if not current_crawling_job_id:
+        return {"results": [], "total_count": 0}
+    
+    try:
+        results = db.get_crawling_results(current_crawling_job_id, limit)
+        progress = db.get_crawling_progress(current_crawling_job_id)
+        
+        return {
+            "results": results,
+            "total_count": progress.get('processed_count', 0),
+            "progress": progress
+        }
+    except Exception as e:
+        logger.error(f"실시간 결과 조회 실패: {e}")
+        return {"results": [], "total_count": 0, "error": str(e)}
 
-# 🆕 추가: 전체 실시간 결과 조회
 @app.get("/api/all-real-time-results")
 async def get_all_real_time_results():
-    """모든 실시간 크롤링 결과 조회"""
-    return {
-        "results": real_time_results,
-        "total_count": len(real_time_results),
-        "completed_count": len([r for r in real_time_results if r.status == "completed"]),
-        "failed_count": len([r for r in real_time_results if r.status == "failed"]),
-        "progress": crawling_progress
-    }
-
-# 🆕 추가: 특정 기관 결과 조회
-@app.get("/api/result/{organization_name}")
-async def get_organization_result(organization_name: str):
-    """특정 기관의 크롤링 결과 조회"""
-    for result in real_time_results:
-        if result.name == organization_name:
-            return result
-    raise HTTPException(status_code=404, detail="기관을 찾을 수 없습니다.")
-
-@app.post("/api/start-crawling")
-async def start_crawling(config: CrawlingConfig):
-    """기존 크롤링 (하위 호환성)"""
-    # Enhanced 크롤링으로 리다이렉트
-    return await start_enhanced_crawling(config)
+    """DB 기반 모든 크롤링 결과 조회"""
+    if not current_crawling_job_id:
+        return {"results": [], "total_count": 0}
+    
+    try:
+        results = db.get_crawling_results(current_crawling_job_id, limit=10000)
+        progress = db.get_crawling_progress(current_crawling_job_id)
+        
+        completed_count = len([r for r in results if r['status'] == 'COMPLETED'])
+        failed_count = len([r for r in results if r['status'] == 'FAILED'])
+        
+        return {
+            "results": results,
+            "total_count": len(results),
+            "completed_count": completed_count,
+            "failed_count": failed_count,
+            "progress": progress
+        }
+    except Exception as e:
+        logger.error(f"전체 결과 조회 실패: {e}")
+        return {"results": [], "total_count": 0, "error": str(e)}
 
 @app.get("/api/results")
 async def get_results():
-    """실시간 크롤링 결과 조회"""
-    global crawling_results
-    logger.debug(f"실시간 결과 조회: {len(crawling_results)}개 항목")
-    return {"results": crawling_results, "count": len(crawling_results)}
-
-@app.get("/api/latest-result")
-async def get_latest_result():
-    """최신 크롤링 결과 1개 조회"""
-    global crawling_results
-    if crawling_results:
-        latest = crawling_results[-1]
-        logger.debug(f"최신 결과 조회: {latest.get('기관명', 'Unknown')}")
-        return {"result": latest, "index": len(crawling_results) - 1}
-    return {"result": None, "index": -1}
-
-@app.post("/api/stop-crawling")
-async def stop_crawling():
-    """크롤링 중지"""
-    global extractor_instance, crawling_status, crawling_progress
+    """DB에서 크롤링 결과 조회"""
+    job = db.get_latest_crawling_job()
+    if not job:
+        return {"results": [], "count": 0}
     
-    logger.info("크롤링 중지 요청")
-    crawling_status["is_running"] = False
-    crawling_progress.status = "stopped"
-    
-    # Enhanced Detail Extractor는 별도 종료 로직 없음 (세션 기반)
-    logger.info("크롤링 중지 완료")
-    return {"message": "크롤링이 중지되었습니다."}
+    results = db.get_crawling_results(job['id'], limit=1000)
+    return {"results": results, "count": len(results)}
 
-@app.get("/api/download-results")
-async def download_results():
-    """결과 파일 다운로드 링크 제공"""
-    try:
-        # ✅ 수정: Enhanced 결과 파일 찾기
-        enhanced_files = [f for f in os.listdir(".") if f.startswith("enhanced_results_")]
-        legacy_files = [f for f in os.listdir(".") if f.startswith("raw_data_with_contacts_")]
-        
-        result_files = enhanced_files + legacy_files
-        
-        if not result_files:
-            raise HTTPException(status_code=404, detail="결과 파일을 찾을 수 없습니다.")
-        
-        latest_file = max(result_files, key=lambda x: os.path.getctime(x))
-        return {"filename": latest_file, "download_url": f"/static/files/{latest_file}"}
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"파일 조회 실패: {str(e)}")
-
-@app.get("/api/extractor-stats")
-async def get_extractor_stats():
-    """✅ 새로운: Enhanced Detail Extractor 통계 조회"""
-    global extractor_instance
-    
-    if not extractor_instance:
-        return {"error": "Extractor 인스턴스가 없습니다."}
-    
-    return {
-        "stats": extractor_instance.stats,
-        "ai_enabled": extractor_instance.use_ai,
-        "total_processed": len(crawling_results),
-        "real_time_count": len(real_time_results),
-        "progress": crawling_progress
-    }
-
-# 기존 통계 API들은 그대로 유지...
+# 기존 통계 API (유지)
 @app.get('/api/statistics')
 def get_statistics():
-    """데이터 통계 API (기존 유지)"""
+    """간단한 데이터 통계 API - DB 기반"""
     try:
-        analyzer = DataStatisticsAnalyzer()
-        files = analyzer.find_latest_files()
+        # DB에서 직접 통계 조회
+        stats = db.get_dashboard_stats()
         
-        if not files['json'] and not files['excel']:
-            return JSONResponse({
-                'status': 'error',
-                'message': '분석할 데이터 파일이 없습니다.'
-            }, status_code=404)
+        return JSONResponse({
+            'status': 'success',
+            'data': {
+                'total_organizations': stats['total_organizations'],
+                'total_users': stats['total_users'],
+                'recent_activities': stats['recent_activities'],
+                'crawling_jobs': stats.get('crawling_jobs', 0),
+                'analysis_time': datetime.now().isoformat()
+            }
+        })
         
-        # JSON 데이터 분석
-        json_stats = {}
-        if files['json']:
-            json_stats = analyzer.analyze_json_data(files['json'])
-        
-        # API용 요약 데이터 생성
-        if json_stats:
-            api_summary = analyzer.get_api_summary(json_stats)
-            return JSONResponse({
-                'status': 'success',
-                'data': api_summary,
-                'file_info': {
-                    'json_file': files.get('json', ''),
-                    'excel_file': files.get('excel', ''),
-                    'analysis_time': datetime.now().isoformat()
-                }
-            })
-        else:
-            return JSONResponse({
-                'status': 'error',
-                'message': '데이터 분석에 실패했습니다.'
-            }, status_code=500)
-            
     except Exception as e:
-        print(f"❌ 통계 API 오류: {e}")
+        logger.error(f"❌ 통계 API 오류: {e}")
         return JSONResponse({
             'status': 'error',
             'message': f'서버 오류: {str(e)}'
         }, status_code=500)
+
+# Organizations API 엔드포인트들 추가
+@app.get("/api/organizations")
+async def get_organizations(
+    page: int = 1,
+    per_page: int = 20,
+    search: str = None,
+    category: str = None,
+    status: str = None
+):
+    """기관 목록 조회 (페이지네이션)"""
+    try:
+        filters = {}
+        if category:
+            filters['category'] = category
+        if status:
+            filters['contact_status'] = status
+            
+        result = db.get_organizations_paginated(
+            page=page,
+            per_page=per_page,
+            search=search,
+            filters=filters
+        )
+        
+        return JSONResponse({
+            "organizations": result["organizations"],
+            "pagination": result["pagination"]
+        })
+        
+    except Exception as e:
+        logger.error(f"기관 목록 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/organizations/{org_id}")
+async def get_organization_detail(org_id: int):
+    """기관 상세 정보 조회"""
+    try:
+        organization = db.get_organization_detail(org_id)
+        if not organization:
+            raise HTTPException(status_code=404, detail="기관을 찾을 수 없습니다.")
+        
+        return {"organization": organization}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"기관 상세 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/organizations/{org_id}")
+async def update_organization(org_id: int, request: Request):
+    """기관 정보 업데이트"""
+    try:
+        updates = await request.json()
+        success = db.update_organization(org_id, updates, updated_by="SYSTEM")
+        
+        if success:
+            return {"message": "기관 정보가 업데이트되었습니다."}
+        else:
+            raise HTTPException(status_code=404, detail="기관을 찾을 수 없습니다.")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"기관 업데이트 실패: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/organizations/{org_id}")
+async def delete_organization(org_id: int):
+    """기관 삭제"""
+    try:
+        success = db.delete_organization(org_id)
+        
+        if success:
+            return {"message": "기관이 삭제되었습니다."}
+        else:
+            raise HTTPException(status_code=404, detail="기관을 찾을 수 없습니다.")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"기관 삭제 실패: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     # 필요한 디렉토리 생성
@@ -464,18 +393,25 @@ if __name__ == "__main__":
     os.makedirs("templates/html", exist_ok=True)
     os.makedirs("templates/css", exist_ok=True)
     os.makedirs("templates/js", exist_ok=True)
-    os.makedirs("logs", exist_ok=True)  # ✅ 추가: 로그 디렉토리
+    os.makedirs("logs", exist_ok=True)
     
-    print("=" * 60)
-    print("🌐 향상된 웹 크롤링 제어 시스템 시작")
-    print("=" * 60)
-    print("🌍 브라우저에서 http://localhost:8000 접속")
-    print("🤖 Enhanced Detail Extractor 지원")
-    print("📁 모듈화된 구조:")
-    print("  📄 HTML: templates/html/")
-    print("  🎨 CSS: templates/css/")
-    print("  ⚡ JS: templates/js/")
-    print("  📊 로그: logs/")
-    print("=" * 60)
+    print("=" * 80)
+    print("🌐 DB 기반 크롤링 시스템 v2.0 시작")
+    print("=" * 80)
+    print("🤖 크롤링 기능:")
+    print("  📄 Enhanced Detail Extractor")
+    print("  📊 실시간 모니터링")
+    print("  🗄️  SQLite DB 저장")
+    print()
+    print("🌍 접속 정보:")
+    print("  📱 브라우저: http://localhost:8000")
+    print("=" * 80)
     
-    uvicorn.run(app, host="0.0.0.0", port=8000) 
+    # 데이터베이스 상태 확인
+    try:
+        stats = db.get_dashboard_stats()
+        print(f"✅ 데이터베이스 연결 확인: {stats['total_organizations']:,}개 기관")
+    except Exception as e:
+        print(f"⚠️  데이터베이스 연결 확인 실패: {e}")
+    
+    uvicorn.run(app, host="0.0.0.0", port=8000)
