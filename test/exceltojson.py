@@ -404,8 +404,8 @@ def main():
     메인 실행 함수
     """
     # 파일 경로 설정
-    excel_file_path = r"C:\Users\kimyh\makedb\Python\cradcrawl_adv\data\excel\교회_원본_수정01.xlsx"
-    output_dir = r"C:\Users\kimyh\makedb\Python\cradcrawl_adv\data\json"
+    excel_file_path = r"C:\Users\MyoengHo Shin\pjt\advanced_crawling\data\excel\교회_원본_수정01.xlsx"
+    output_dir = r"C:\Users\MyoengHo Shin\pjt\advanced_crawling\data\json"
     
     # 출력 파일명 생성 (타임스탬프 포함)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
