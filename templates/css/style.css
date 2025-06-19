@@ -134,3 +134,31 @@
         display: none !important;
     }
 }
+
+/* 메인 콘텐츠 영역 스크롤 개선 */
+#page-content {
+    height: calc(100vh - 64px); /* 네비게이션 바 높이 제외 */
+    overflow-y: auto;
+    padding-bottom: 2rem; /* 하단 여백 추가 */
+}
+
+/* 기관 목록 컨테이너 */
+.organizations-container {
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 페이지네이션 영역 */
+#organizations-pagination {
+    margin-top: auto;
+    padding: 1rem 0;
+    background: white;
+    border-top: 1px solid #e5e7eb;
+}
+
+/* 테이블 컨테이너 */
+#organizations-table-container {
+    flex: 1;
+    overflow-x: auto;
+}

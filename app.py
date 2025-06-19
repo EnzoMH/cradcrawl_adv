@@ -118,15 +118,18 @@ async def start_enhanced_crawling(request: Request):
     logger.info(f"Enhanced 크롤링 시작 요청: {config_data}")
     
     try:
-        # 데이터 파일 로드
-        if os.path.exists("raw_data_0530.json"):
+        # 121-128 라인 수정
+        if os.path.exists("data/json/merged_church_data_20250618_174032.json"):
+            current_data_file = "data/json/merged_church_data_20250618_174032.json"
+            data = FileUtils.load_json(current_data_file)
+        elif os.path.exists("raw_data_0530.json"):
             current_data_file = "raw_data_0530.json"
             data = FileUtils.load_json(current_data_file)
         elif os.path.exists("raw_data.json"):
             current_data_file = "raw_data.json"
             data = FileUtils.load_json(current_data_file)
         else:
-            raise HTTPException(status_code=404, detail="raw_data.json 또는 raw_data_0530.json 파일을 찾을 수 없습니다.")
+            raise HTTPException(status_code=404, detail="데이터 파일을 찾을 수 없습니다.")
         
         # 데이터 처리
         total_organizations = []
@@ -303,16 +306,16 @@ def get_statistics():
             'message': f'서버 오류: {str(e)}'
         }, status_code=500)
 
-# Organizations API 엔드포인트들 추가
+# Organizations API 수정 (기존 코드 교체)
 @app.get("/api/organizations")
 async def get_organizations(
     page: int = 1,
-    per_page: int = 20,
+    per_page: int = 50,  # 50개로 증가
     search: str = None,
     category: str = None,
     status: str = None
 ):
-    """기관 목록 조회 (페이지네이션)"""
+    """기관 목록 조회 (무한 스크롤용)"""
     try:
         filters = {}
         if category:
@@ -329,13 +332,19 @@ async def get_organizations(
         
         return JSONResponse({
             "organizations": result["organizations"],
-            "pagination": result["pagination"]
+            "pagination": {
+                "current_page": result["pagination"]["page"],
+                "per_page": result["pagination"]["per_page"], 
+                "total_count": result["pagination"]["total_count"],
+                "total_pages": result["pagination"]["total_pages"],
+                "has_next": result["pagination"]["page"] < result["pagination"]["total_pages"]
+            }
         })
         
     except Exception as e:
         logger.error(f"기관 목록 조회 실패: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
+    
 @app.get("/api/organizations/{org_id}")
 async def get_organization_detail(org_id: int):
     """기관 상세 정보 조회"""

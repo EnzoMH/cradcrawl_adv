@@ -11,8 +11,11 @@ class CRMSystem {
             category: '',
             status: '',
             page: 1,
-            perPage: 20
+            perPage: 50  // 50개로 증가
         };
+        this.pagination = {};
+        this.isLoading = false;
+        this.hasMore = true;
         this.intervals = {
             crawling: null,
             dashboard: null
@@ -99,8 +102,16 @@ class CRMSystem {
     }
 
     async loadOrganizations(resetPage = false) {
+        if (this.isLoading) return;
+        
         try {
-            if (resetPage) this.filters.page = 1;
+            this.isLoading = true;
+            
+            if (resetPage) {
+                this.filters.page = 1;
+                this.organizations = [];
+                this.hasMore = true;
+            }
             
             const params = new URLSearchParams({
                 page: this.filters.page,
@@ -115,16 +126,88 @@ class CRMSystem {
             const data = await response.json();
             
             if (response.ok) {
-                this.organizations = data.organizations || [];
+                if (resetPage) {
+                    this.organizations = data.organizations || [];
+                } else {
+                    // 기존 데이터에 추가
+                    this.organizations = [...this.organizations, ...(data.organizations || [])];
+                }
+                
                 this.pagination = data.pagination || {};
-                UI.renderOrganizationsList(this.organizations, this.pagination);
+                this.hasMore = data.pagination?.has_next || false;
+                
+                // UI 업데이트
+                if (this.currentPage === 'organizations') {
+                    this.updateOrganizationsUI();
+                }
+                
+                console.log(`📊 로드됨: ${data.organizations?.length || 0}개, 총: ${this.organizations.length}개`);
             } else {
                 throw new Error(data.message || '기관 목록 로드 실패');
             }
         } catch (error) {
             console.error('기관 목록 로드 실패:', error);
             UI.showError('기관 목록을 불러올 수 없습니다.');
+        } finally {
+            this.isLoading = false;
         }
+    }
+
+    updateOrganizationsUI() {
+        const tableContainer = document.getElementById('organizations-table-container');
+        if (tableContainer) {
+            tableContainer.innerHTML = UI.renderOrganizationsTable(this.organizations);
+        }
+        
+        const statsContainer = document.getElementById('organizations-stats');
+        if (statsContainer) {
+            statsContainer.innerHTML = UI.renderOrganizationsStats(this.organizations, this.pagination);
+        }
+        
+        // 무한 스크롤 이벤트 바인딩
+        this.bindInfiniteScroll();
+    }
+
+    bindInfiniteScroll() {
+        const tableContainer = document.getElementById('organizations-table-container');
+        if (!tableContainer) return;
+        
+        tableContainer.removeEventListener('scroll', this.handleScroll);
+        tableContainer.addEventListener('scroll', this.handleScroll.bind(this));
+    }
+
+    handleScroll(event) {
+        const container = event.target;
+        const { scrollTop, scrollHeight, clientHeight } = container;
+        
+        // 하단에서 100px 이내에 도달하면 다음 페이지 로드
+        if (scrollHeight - scrollTop <= clientHeight + 100) {
+            this.loadMoreOrganizations();
+        }
+    }
+
+    async loadMoreOrganizations() {
+        if (!this.hasMore || this.isLoading) return;
+        
+        this.filters.page += 1;
+        await this.loadOrganizations(false);
+    }
+
+    // 필터 변경시 처리
+    updateFilters(newFilters) {
+        this.filters = { ...this.filters, ...newFilters, page: 1 };
+        this.loadOrganizations(true);
+    }
+
+    resetFilters() {
+        this.filters = {
+            search: '',
+            category: '',
+            status: '',
+            page: 1,
+            perPage: 50
+        };
+        this.loadOrganizations(true);
     }
 
     async getOrganizationDetail(id) {
@@ -303,8 +386,10 @@ class CRMSystem {
         }
     }
 
-    // ===== 페이지 네비게이션 =====
+    // ===== 페이지 네비게이션 ===== (321라인 근처)
     async navigateTo(page) {
+        console.log(`🔄 페이지 이동: ${this.currentPage} -> ${page}`);
+        
         if (this.currentPage === page) return;
         
         this.currentPage = page;
@@ -322,7 +407,17 @@ class CRMSystem {
                 break;
         }
         
-        UI.renderCurrentPage(this);
+        // ✅ 실제로 DOM 업데이트하기
+        const pageContent = document.getElementById('page-content');
+        if (pageContent) {
+            console.log(`🔄 ${page} 페이지 콘텐츠 렌더링`);
+            pageContent.innerHTML = UI.renderCurrentPage(this);
+            
+            // 이벤트 다시 바인딩
+            UI.bindEvents(this);
+        } else {
+            console.error('❌ page-content 요소를 찾을 수 없음');
+        }
     }
 
     // ===== 검색 및 필터 =====

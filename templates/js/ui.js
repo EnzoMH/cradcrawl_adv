@@ -185,12 +185,12 @@ const UI = {
         `;
     },
 
-    // ===== 기관 관리 페이지 =====
+    // 기관 관리 페이지 수정
     renderOrganizations(crmSystem) {
         return `
-            <div class="p-6">
+            <div class="p-6 h-full flex flex-col">
                 <!-- 헤더 -->
-                <div class="mb-6">
+                <div class="mb-6 flex-shrink-0">
                     <div class="flex justify-between items-center">
                         <div>
                             <h2 class="text-2xl font-bold text-gray-900">기관 관리</h2>
@@ -210,16 +210,72 @@ const UI = {
                 </div>
 
                 <!-- 검색 및 필터 -->
-                ${this.renderOrganizationFilters(crmSystem)}
+                <div class="flex-shrink-0 mb-6">
+                    ${this.renderOrganizationFilters(crmSystem)}
+                </div>
 
-                <!-- 기관 목록 -->
-                <div class="bg-white rounded-lg shadow overflow-hidden">
-                    <div id="organizations-table-container">
+                <!-- 통계 정보 -->
+                <div id="organizations-stats" class="flex-shrink-0 mb-4">
+                    ${this.renderOrganizationsStats(crmSystem.organizations, crmSystem.pagination)}
+                </div>
+
+                <!-- 기관 목록 - 무한 스크롤 -->
+                <div class="flex-1 bg-white rounded-lg shadow overflow-hidden">
+                    <div id="organizations-table-container" class="h-full overflow-auto">
                         ${this.renderOrganizationsTable(crmSystem.organizations || [])}
+                        ${crmSystem.isLoading ? this.renderLoadingIndicator() : ''}
+                        ${!crmSystem.hasMore && crmSystem.organizations.length > 0 ? this.renderEndIndicator() : ''}
                     </div>
-                    <div id="organizations-pagination">
-                        ${this.renderPagination(crmSystem.pagination || {})}
+                </div>
+            </div>
+        `;
+    },
+
+    renderOrganizationsStats(organizations, pagination) {
+        const total = pagination?.total_count || 0;
+        const loaded = organizations?.length || 0;
+        
+        return `
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <div class="text-sm text-blue-700">
+                            <i class="fas fa-building mr-1"></i>
+                            <strong>${loaded.toLocaleString()}</strong>개 표시 중 / 
+                            총 <strong>${total.toLocaleString()}</strong>개
+                        </div>
+                        ${loaded < total ? `
+                            <div class="text-xs text-blue-600">
+                                <i class="fas fa-arrow-down mr-1"></i>
+                                스크롤하여 더 보기
+                            </div>
+                        ` : ''}
                     </div>
+                    <div class="text-xs text-blue-600">
+                        50개씩 자동 로드
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+    
+    renderLoadingIndicator() {
+        return `
+            <div class="flex justify-center items-center py-8">
+                <div class="flex items-center space-x-2 text-gray-500">
+                    <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                    <span class="text-sm">더 많은 기관 로드 중...</span>
+                </div>
+            </div>
+        `;
+    },
+    
+    renderEndIndicator() {
+        return `
+            <div class="flex justify-center items-center py-8">
+                <div class="text-sm text-gray-500">
+                    <i class="fas fa-check-circle mr-2 text-green-500"></i>
+                    모든 기관을 불러왔습니다
                 </div>
             </div>
         `;
@@ -394,6 +450,22 @@ const UI = {
                  class="fixed top-4 right-4 z-50 space-y-2">
             </div>
         `;
+    },
+    // renderToastContainer() 함수 뒤에 추가
+    renderOrganizationsList(organizations, pagination) {
+        console.log('🔄 기관 목록 업데이트:', organizations.length, '개');
+        
+        // 테이블 컨테이너 업데이트
+        const tableContainer = document.getElementById('organizations-table-container');
+        if (tableContainer) {
+            tableContainer.innerHTML = this.renderOrganizationsTable(organizations);
+        }
+        
+        // 페이지네이션 컨테이너 업데이트  
+        const paginationContainer = document.getElementById('organizations-pagination');
+        if (paginationContainer) {
+            paginationContainer.innerHTML = this.renderPagination(pagination);
+        }
     },
 
     renderModalContainer() {

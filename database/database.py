@@ -523,10 +523,12 @@ class ChurchCRMDatabase:
             
             return {
                 "organizations": [dict(org) for org in organizations],
-                "total_count": total_count,
-                "page": page,
-                "per_page": per_page,
-                "total_pages": (total_count + per_page - 1) // per_page
+                "pagination": {
+                    "total_count": total_count,
+                    "page": page,
+                    "per_page": per_page,
+                    "total_pages": (total_count + per_page - 1) // per_page
+                }
             }
     
     def get_organization_detail(self, org_id: int, user_role: str = None, 
