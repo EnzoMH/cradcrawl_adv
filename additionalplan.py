@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AI Agentic Workflow 기반 통합 크롤링 엔진
+AI Agentic Workflow 기반 통합 크롤링 엔진 - 개선된 버전
 기존 모든 모듈을 통합하고 AI 에이전트 기반 워크플로우 적용
 """
 
@@ -9,11 +9,17 @@ import asyncio
 import json
 import time
 import logging
+import re
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Callable
 from pathlib import Path
 from dataclasses import dataclass
 from enum import Enum
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 # 프로젝트 설정 import
 from settings import *
@@ -28,6 +34,7 @@ class CrawlingStage(Enum):
     INITIALIZATION = "초기화"
     HOMEPAGE_SEARCH = "홈페이지_검색"
     HOMEPAGE_ANALYSIS = "홈페이지_분석"
+    CONTACT_PAGE_SEARCH = "연락처페이지_검색"  # 새로 추가
     CONTACT_EXTRACTION = "연락처_추출"
     FAX_SEARCH = "팩스_검색"
     AI_VERIFICATION = "AI_검증"
@@ -66,7 +73,7 @@ class AIAgent:
         context.confidence_scores[field] = score
 
 class HomepageSearchAgent(AIAgent):
-    """홈페이지 검색 AI 에이전트"""
+    """홈페이지 검색 AI 에이전트 (개선된 버전)"""
     
     def __init__(self, ai_manager: AIModelManager, logger: logging.Logger):
         super().__init__("HomepageSearchAgent", ai_manager, logger)
@@ -76,28 +83,28 @@ class HomepageSearchAgent(AIAgent):
         """홈페이지 URL 검색 및 검증"""
         try:
             org_name = context.organization.get('name', '')
+            category = context.organization.get('category', '')
             self.logger.info(f"🔍 [{self.name}] 홈페이지 검색: {org_name}")
             
             # 기존 홈페이지가 있으면 검증
             existing_homepage = context.organization.get('homepage', '')
             if existing_homepage:
-                is_valid = await self._verify_homepage_with_ai(existing_homepage, org_name)
-                if is_valid:
+                verification_result = await self._verify_homepage_with_ai(existing_homepage, org_name, category)
+                if verification_result['is_valid']:
                     context.extracted_data['homepage'] = existing_homepage
+                    context.extracted_data['homepage_type'] = verification_result['type']
                     self.update_confidence(context, 'homepage', 0.9)
                     return context
             
             # 새로운 홈페이지 검색
-            homepage_url = await self._search_homepage(org_name)
-            if homepage_url:
-                # AI로 검색 결과 검증
-                is_relevant = await self._verify_homepage_with_ai(homepage_url, org_name)
-                if is_relevant:
-                    context.extracted_data['homepage'] = homepage_url
-                    self.update_confidence(context, 'homepage', 0.8)
-                    self.logger.info(f"✅ 홈페이지 발견: {homepage_url}")
-                else:
-                    self.logger.warning(f"❌ AI 검증 실패: {homepage_url}")
+            search_results = await self._search_homepage_comprehensive(org_name, category)
+            if search_results:
+                best_result = search_results[0]  # 최고 점수
+                context.extracted_data['homepage'] = best_result['url']
+                context.extracted_data['homepage_type'] = best_result['type']
+                context.extracted_data['homepage_confidence'] = best_result['confidence']
+                self.update_confidence(context, 'homepage', best_result['confidence'])
+                self.logger.info(f"✅ 홈페이지 발견: {best_result['url']} ({best_result['type']})")
             
             context.current_stage = CrawlingStage.HOMEPAGE_ANALYSIS
             return context
@@ -107,72 +114,199 @@ class HomepageSearchAgent(AIAgent):
             self.logger.error(f"❌ [{self.name}] 오류: {e}")
             return context
     
-    async def _search_homepage(self, org_name: str) -> Optional[str]:
-        """구글 검색으로 홈페이지 찾기"""
+    async def _search_homepage_comprehensive(self, org_name: str, category: str) -> List[Dict]:
+        """종합적인 홈페이지 검색 (공식사이트 + 소셜미디어)"""
         driver = None
         try:
             driver = self.crawler_utils.setup_driver(headless=True)
             if not driver:
-                return None
+                return []
             
-            search_query = f"{org_name} 홈페이지 site:*.kr OR site:*.com"
-            success = self.crawler_utils.search_google(driver, search_query)
+            all_results = []
             
-            if success:
-                urls = self.crawler_utils.extract_urls_from_page(driver)
-                # 첫 번째 유효한 URL 반환
-                for url in urls[:5]:  # 상위 5개만 확인
-                    if self._is_valid_homepage_url(url):
-                        return url
+            # 1. 공식 홈페이지 검색
+            official_results = await self._search_official_homepage(driver, org_name, category)
+            all_results.extend(official_results)
             
-            return None
+            # 2. 소규모 기관인 경우 소셜미디어 검색
+            if is_small_organization(org_name, category):
+                social_results = await self._search_social_media(driver, org_name, category)
+                all_results.extend(social_results)
+            
+            # 점수순 정렬
+            all_results.sort(key=lambda x: x['confidence'], reverse=True)
+            return all_results[:5]  # 상위 5개만 반환
             
         except Exception as e:
-            self.logger.error(f"홈페이지 검색 오류: {e}")
-            return None
+            self.logger.error(f"종합 홈페이지 검색 오류: {e}")
+            return []
         finally:
             if driver:
                 self.crawler_utils.safe_close_driver(driver)
     
-    async def _verify_homepage_with_ai(self, url: str, org_name: str) -> bool:
-        """AI로 홈페이지 관련성 검증"""
-        try:
-            prompt = f"""
-            기관명: {org_name}
-            홈페이지 URL: {url}
-            
-            위 URL이 해당 기관의 공식 홈페이지인지 판단해주세요.
-            
-            판단 기준:
-            1. 도메인명이 기관명과 관련이 있는가?
-            2. URL 구조가 공식 사이트 같은가?
-            3. 블로그, 카페, 위키 등이 아닌 공식 사이트인가?
-            
-            결과: "관련있음" 또는 "관련없음"
-            이유: [판단 이유]
-            """
-            
-            response = await self.ai_manager.extract_with_gemini(url, prompt)
-            return "관련있음" in response
-            
-        except Exception as e:
-            self.logger.error(f"AI 홈페이지 검증 오류: {e}")
-            return False
+    async def _search_official_homepage(self, driver, org_name: str, category: str) -> List[Dict]:
+        """공식 홈페이지 검색"""
+        results = []
+        
+        search_queries = [
+            f"{org_name} 홈페이지 site:*.kr",
+            f"{org_name} 공식사이트 site:*.org",
+            f"{org_name} {category} 홈페이지"
+        ]
+        
+        for query in search_queries:
+            try:
+                success = self.crawler_utils.search_google(driver, query)
+                if success:
+                    urls = self.crawler_utils.extract_urls_from_page(driver)
+                    for url in urls[:3]:
+                        if self._is_official_homepage_url(url, org_name):
+                            verification = await self._verify_homepage_with_ai(url, org_name, category)
+                            if verification['is_valid']:
+                                results.append({
+                                    'url': url,
+                                    'type': 'official',
+                                    'confidence': verification['confidence'],
+                                    'source': query
+                                })
+                
+                await asyncio.sleep(2)  # 검색 간 딜레이
+                
+            except Exception as e:
+                self.logger.warning(f"공식 홈페이지 검색 오류: {e}")
+        
+        return results
     
-    def _is_valid_homepage_url(self, url: str) -> bool:
-        """URL 유효성 기본 검증"""
+    async def _search_social_media(self, driver, org_name: str, category: str) -> List[Dict]:
+        """소셜미디어 홈페이지 검색"""
+        results = []
+        
+        social_queries = [
+            f"{org_name} site:blog.naver.com",
+            f"{org_name} site:cafe.naver.com", 
+            f"{org_name} site:facebook.com",
+            f"{org_name} site:instagram.com",
+            f"{org_name} site:youtube.com"
+        ]
+        
+        for query in social_queries:
+            try:
+                success = self.crawler_utils.search_google(driver, query)
+                if success:
+                    urls = self.crawler_utils.extract_urls_from_page(driver)
+                    for url in urls[:2]:
+                        if self._is_social_media_url(url, org_name):
+                            verification = await self._verify_homepage_with_ai(url, org_name, category)
+                            if verification['is_valid']:
+                                results.append({
+                                    'url': url,
+                                    'type': self._get_social_media_type(url),
+                                    'confidence': verification['confidence'] * 0.7,  # 소셜미디어는 신뢰도 낮춤
+                                    'source': query
+                                })
+                
+                await asyncio.sleep(2)
+                
+            except Exception as e:
+                self.logger.warning(f"소셜미디어 검색 오류: {e}")
+        
+        return results
+    
+    def _is_official_homepage_url(self, url: str, org_name: str) -> bool:
+        """공식 홈페이지 URL 검증"""
         if not url or not url.startswith(('http://', 'https://')):
             return False
         
-        # 제외 도메인 확인
-        for exclude_domain in EXCLUDE_DOMAINS:
+        # STRICT_EXCLUDE_DOMAINS만 제외
+        for exclude_domain in STRICT_EXCLUDE_DOMAINS:
             if exclude_domain in url.lower():
                 return False
         
         return True
+    
+    def _is_social_media_url(self, url: str, org_name: str) -> bool:
+        """소셜미디어 URL 검증"""
+        if not url or not url.startswith(('http://', 'https://')):
+            return False
+        
+        # 소셜미디어 도메인 확인
+        for domain in SOCIAL_MEDIA_DOMAINS.keys():
+            if domain in url.lower():
+                return True
+        
+        return False
+    
+    def _get_social_media_type(self, url: str) -> str:
+        """소셜미디어 타입 반환"""
+        for domain, type_name in SOCIAL_MEDIA_DOMAINS.items():
+            if domain in url.lower():
+                return type_name
+        return "소셜미디어"
+    
+    async def _verify_homepage_with_ai(self, url: str, org_name: str, category: str) -> Dict:
+        """AI로 홈페이지 관련성 검증 (개선된 프롬프트)"""
+        try:
+            prompt = f"""
+            다음 정보를 바탕으로 홈페이지의 관련성을 판단해주세요:
+
+            **기관 정보:**
+            - 기관명: {org_name}
+            - 카테고리: {category}
+            - 홈페이지 URL: {url}
+
+            **판단 기준:**
+            1. 도메인명이 기관명과 관련이 있는가?
+            2. URL이 해당 기관의 공식 또는 관련 페이지인가?
+            3. 소규모 기관의 경우 블로그/카페/SNS도 공식 페이지로 인정
+            4. 기관의 성격과 URL 타입이 적합한가?
+
+            **응답 형식:**
+            VALID: [예/아니오]
+            TYPE: [공식사이트/네이버블로그/네이버카페/페이스북/인스타그램/유튜브/기타]
+            CONFIDENCE: [0.1-1.0 사이의 신뢰도 점수]
+            REASON: [판단 이유 1-2문장]
+            """
+            
+            response = await self.ai_manager.extract_with_gemini(url, prompt)
+            return self._parse_verification_response(response)
+            
+        except Exception as e:
+            self.logger.error(f"AI 홈페이지 검증 오류: {e}")
+            return {'is_valid': False, 'type': '알수없음', 'confidence': 0.0}
+    
+    def _parse_verification_response(self, response: str) -> Dict:
+        """AI 검증 응답 파싱"""
+        result = {
+            'is_valid': False,
+            'type': '알수없음',
+            'confidence': 0.0,
+            'reason': ''
+        }
+        
+        try:
+            lines = response.split('\n')
+            for line in lines:
+                line = line.strip()
+                if line.startswith('VALID:'):
+                    result['is_valid'] = '예' in line
+                elif line.startswith('TYPE:'):
+                    result['type'] = line.replace('TYPE:', '').strip()
+                elif line.startswith('CONFIDENCE:'):
+                    confidence_text = line.replace('CONFIDENCE:', '').strip()
+                    try:
+                        result['confidence'] = float(confidence_text)
+                    except:
+                        result['confidence'] = 0.5
+                elif line.startswith('REASON:'):
+                    result['reason'] = line.replace('REASON:', '').strip()
+        
+        except Exception as e:
+            self.logger.warning(f"검증 응답 파싱 오류: {e}")
+        
+        return result
 
 class HomepageAnalysisAgent(AIAgent):
-    """홈페이지 분석 AI 에이전트 (urlextractor_2.py 로직 통합)"""
+    """홈페이지 분석 AI 에이전트 (개선된 버전)"""
     
     def __init__(self, ai_manager: AIModelManager, logger: logging.Logger):
         super().__init__("HomepageAnalysisAgent", ai_manager, logger)
@@ -183,40 +317,32 @@ class HomepageAnalysisAgent(AIAgent):
         try:
             homepage_url = context.extracted_data.get('homepage')
             if not homepage_url:
-                context.current_stage = CrawlingStage.CONTACT_EXTRACTION
+                context.current_stage = CrawlingStage.CONTACT_PAGE_SEARCH
                 return context
             
             org_name = context.organization.get('name', '')
             self.logger.info(f"🌐 [{self.name}] 홈페이지 분석: {homepage_url}")
             
-            # 홈페이지 파싱 (urlextractor_2.py 로직 활용)
+            # 홈페이지 파싱
             page_data = await self._extract_page_content(homepage_url)
             
             if page_data and page_data.get('accessible'):
-                # AI로 페이지 내용 요약 및 정보 추출
-                ai_summary = await self._analyze_with_ai(org_name, page_data)
-                
-                # 추출된 연락처 정보 저장
+                # 연락처 정보 추출
                 contact_info = page_data.get('contact_info', {})
-                if contact_info.get('phones'):
-                    context.extracted_data['phone'] = contact_info['phones'][0]
-                    self.update_confidence(context, 'phone', 0.9)
+                self._store_contact_info(context, contact_info)
                 
-                if contact_info.get('emails'):
-                    context.extracted_data['email'] = contact_info['emails'][0]
-                    self.update_confidence(context, 'email', 0.9)
+                # 연락처 페이지 링크 찾기
+                contact_links = self._find_contact_page_links(page_data)
+                if contact_links:
+                    context.extracted_data['contact_page_links'] = contact_links
                 
-                if contact_info.get('addresses'):
-                    context.extracted_data['address'] = contact_info['addresses'][0]
-                    self.update_confidence(context, 'address', 0.8)
-                
-                # AI 분석 결과 저장
+                # AI 분석 실행
+                ai_summary = await self._analyze_with_ai(org_name, page_data)
                 context.ai_insights['homepage_analysis'] = ai_summary
-                context.extracted_data['page_title'] = page_data.get('title', '')
                 
-                self.logger.info(f"✅ 홈페이지 분석 완료: {len(contact_info)} 연락처 정보 추출")
+                self.logger.info(f"✅ 홈페이지 분석 완료: 연락처 {len(contact_info)} 항목, 연락처 페이지 {len(contact_links)} 개")
             
-            context.current_stage = CrawlingStage.CONTACT_EXTRACTION
+            context.current_stage = CrawlingStage.CONTACT_PAGE_SEARCH
             return context
             
         except Exception as e:
@@ -224,8 +350,81 @@ class HomepageAnalysisAgent(AIAgent):
             self.logger.error(f"❌ [{self.name}] 오류: {e}")
             return context
     
+    def _find_contact_page_links(self, page_data: Dict) -> List[Dict]:
+        """연락처 페이지 링크 찾기"""
+        contact_links = []
+        
+        try:
+            soup = page_data.get('soup')
+            base_url = page_data.get('url', '')
+            
+            if not soup:
+                return []
+            
+            # 링크 요소들 찾기
+            links = soup.find_all('a', href=True)
+            
+            for link in links:
+                link_text = link.get_text(strip=True).lower()
+                href = link.get('href', '')
+                
+                # 연락처 관련 키워드 확인
+                for keyword in CONTACT_NAVIGATION_KEYWORDS:
+                    if keyword.lower() in link_text:
+                        full_url = self._resolve_url(href, base_url)
+                        if full_url:
+                            contact_links.append({
+                                'url': full_url,
+                                'text': link.get_text(strip=True),
+                                'keyword': keyword
+                            })
+                        break
+        
+        except Exception as e:
+            self.logger.warning(f"연락처 페이지 링크 찾기 오류: {e}")
+        
+        return contact_links[:5]  # 최대 5개까지
+    
+    def _resolve_url(self, href: str, base_url: str) -> Optional[str]:
+        """상대 URL을 절대 URL로 변환"""
+        try:
+            from urllib.parse import urljoin, urlparse
+            
+            if href.startswith(('http://', 'https://')):
+                return href
+            elif href.startswith('/'):
+                parsed = urlparse(base_url)
+                return f"{parsed.scheme}://{parsed.netloc}{href}"
+            else:
+                return urljoin(base_url, href)
+        except:
+            return None
+    
+    def _store_contact_info(self, context: CrawlingContext, contact_info: Dict):
+        """연락처 정보 저장"""
+        # 기본 연락처 정보
+        if contact_info.get('phones'):
+            context.extracted_data['phone'] = contact_info['phones'][0]
+            self.update_confidence(context, 'phone', 0.9)
+            
+            # 추가 전화번호들 저장
+            if len(contact_info['phones']) > 1:
+                context.extracted_data['additional_phones'] = contact_info['phones'][1:5]  # 최대 4개 추가
+        
+        if contact_info.get('faxes'):
+            context.extracted_data['fax'] = contact_info['faxes'][0]
+            self.update_confidence(context, 'fax', 0.9)
+        
+        if contact_info.get('emails'):
+            context.extracted_data['email'] = contact_info['emails'][0]
+            self.update_confidence(context, 'email', 0.9)
+        
+        if contact_info.get('addresses'):
+            context.extracted_data['address'] = contact_info['addresses'][0]
+            self.update_confidence(context, 'address', 0.8)
+    
     async def _extract_page_content(self, url: str) -> Dict[str, Any]:
-        """페이지 내용 추출 (urlextractor_2.py의 HomepageParser 로직)"""
+        """페이지 내용 추출 (개선된 버전)"""
         driver = None
         try:
             driver = self.crawler_utils.setup_driver(headless=True)
@@ -234,22 +433,29 @@ class HomepageAnalysisAgent(AIAgent):
             
             # 페이지 로드
             driver.get(url)
-            time.sleep(3)  # 동적 콘텐츠 로딩 대기
+            time.sleep(3)
             
             # 접근 가능성 확인
             if not self._is_page_accessible(driver):
                 return {'accessible': False}
             
+            # BeautifulSoup 파싱
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(driver.page_source, 'html.parser')
+            
+            # 텍스트 추출
+            page_text = soup.get_text(separator=' ', strip=True)
+            
             # 연락처 정보 추출
-            page_text = driver.find_element(By.TAG_NAME, "body").text
-            contact_info = self._extract_contact_info(page_text)
+            contact_info = self._extract_contact_info_enhanced(page_text)
             
             return {
                 'accessible': True,
                 'title': driver.title,
                 'url': url,
-                'text_content': page_text[:5000],  # 처음 5000자만
-                'contact_info': contact_info
+                'text_content': page_text[:5000],
+                'contact_info': contact_info,
+                'soup': soup  # BeautifulSoup 객체도 저장
             }
             
         except Exception as e:
@@ -259,43 +465,41 @@ class HomepageAnalysisAgent(AIAgent):
             if driver:
                 self.crawler_utils.safe_close_driver(driver)
     
-    def _is_page_accessible(self, driver) -> bool:
-        """페이지 접근 가능성 확인"""
-        try:
-            title = driver.title.lower()
-            if any(keyword in title for keyword in ['404', 'not found', 'error']):
-                return False
-            
-            page_source = driver.page_source
-            return len(page_source) > 1000
-            
-        except:
-            return False
-    
-    def _extract_contact_info(self, text: str) -> Dict[str, List[str]]:
-        """연락처 정보 추출"""
+    def _extract_contact_info_enhanced(self, text: str) -> Dict[str, List[str]]:
+        """강화된 연락처 정보 추출"""
         contact_info = {
             "phones": [],
             "faxes": [],
             "emails": [],
-            "addresses": []
+            "addresses": [],
+            "additional_phones": []
         }
         
         try:
-            # 전화번호 추출
+            # 기본 전화번호 추출
             for pattern in PHONE_EXTRACTION_PATTERNS:
                 matches = re.findall(pattern, text, re.IGNORECASE)
                 for match in matches:
                     phone = PhoneUtils.format_phone_number(match)
-                    if phone and phone not in contact_info["phones"]:
+                    if phone and validate_phone_length(phone) and phone not in contact_info["phones"]:
                         contact_info["phones"].append(phone)
+            
+            # 추가 전화번호 추출
+            for pattern in ADDITIONAL_PHONE_PATTERNS:
+                matches = re.findall(pattern, text, re.IGNORECASE)
+                for match in matches:
+                    phone = PhoneUtils.format_phone_number(match)
+                    if (phone and validate_phone_length(phone) and 
+                        phone not in contact_info["phones"] and 
+                        phone not in contact_info["additional_phones"]):
+                        contact_info["additional_phones"].append(phone)
             
             # 팩스번호 추출
             for pattern in FAX_EXTRACTION_PATTERNS:
                 matches = re.findall(pattern, text, re.IGNORECASE)
                 for match in matches:
                     fax = PhoneUtils.format_phone_number(match)
-                    if fax and fax not in contact_info["faxes"]:
+                    if fax and validate_phone_length(fax) and fax not in contact_info["faxes"]:
                         contact_info["faxes"].append(fax)
             
             # 이메일 추출
@@ -318,6 +522,19 @@ class HomepageAnalysisAgent(AIAgent):
         
         return contact_info
     
+    def _is_page_accessible(self, driver) -> bool:
+        """페이지 접근 가능성 확인"""
+        try:
+            title = driver.title.lower()
+            if any(keyword in title for keyword in ['404', 'not found', 'error']):
+                return False
+            
+            page_source = driver.page_source
+            return len(page_source) > 1000
+            
+        except:
+            return False
+    
     def _is_valid_email(self, email: str) -> bool:
         """이메일 유효성 확인"""
         import re
@@ -331,8 +548,10 @@ class HomepageAnalysisAgent(AIAgent):
         return re.sub(r'\s+', ' ', address.strip())
     
     async def _analyze_with_ai(self, org_name: str, page_data: Dict[str, Any]) -> Dict[str, Any]:
-        """AI로 페이지 내용 분석 (urlextractor_2.py의 summarize_with_ai 로직)"""
+        """AI로 페이지 내용 분석 (개선된 프롬프트)"""
         try:
+            contact_info = page_data.get('contact_info', {})
+            
             prompt = f"""
             '{org_name}' 기관의 홈페이지를 분석해주세요.
 
@@ -340,14 +559,15 @@ class HomepageAnalysisAgent(AIAgent):
             - 제목: {page_data.get('title', '')}
             - URL: {page_data.get('url', '')}
 
-            **홈페이지 내용:**
-            {page_data.get('text_content', '')[:2000]}
-
             **추출된 연락처:**
-            - 전화번호: {', '.join(page_data.get('contact_info', {}).get('phones', []))}
-            - 팩스번호: {', '.join(page_data.get('contact_info', {}).get('faxes', []))}
-            - 이메일: {', '.join(page_data.get('contact_info', {}).get('emails', []))}
-            - 주소: {', '.join(page_data.get('contact_info', {}).get('addresses', []))}
+            - 전화번호: {', '.join(contact_info.get('phones', []))}
+            - 추가전화번호: {', '.join(contact_info.get('additional_phones', []))}
+            - 팩스번호: {', '.join(contact_info.get('faxes', []))}
+            - 이메일: {', '.join(contact_info.get('emails', []))}
+            - 주소: {', '.join(contact_info.get('addresses', []))}
+
+            **홈페이지 내용 (처음 2000자):**
+            {page_data.get('text_content', '')[:2000]}
 
             **분석 요청:**
             다음 형식으로 응답해주세요:
@@ -356,8 +576,10 @@ class HomepageAnalysisAgent(AIAgent):
             CATEGORY: [기관 유형 - 교회, 병원, 학교, 정부기관, 기업, 단체 등]
             SERVICES: [주요 서비스 3개, 쉼표로 구분]
             LOCATION: [위치정보]
-            CONTACT_QUALITY: [상/중/하]
-            WEBSITE_QUALITY: [상/중/하]
+            PHONE_VALIDATION: [추출된 전화번호들이 9-11자리 한국 전화번호 형식에 맞는지 - 적합/부적합]
+            FAX_PHONE_DUPLICATE: [팩스번호와 전화번호가 동일한지 - 동일/다름/확인불가]
+            CONTACT_QUALITY: [연락처 정보 품질 - 상/중/하]
+            WEBSITE_QUALITY: [웹사이트 품질 - 상/중/하]
             FEATURES: [특별한 특징 2개, 쉼표로 구분]
             """
             
@@ -369,12 +591,14 @@ class HomepageAnalysisAgent(AIAgent):
             return {'summary': f'AI 분석 오류: {str(e)}'}
     
     def _parse_ai_response(self, response: str) -> Dict[str, Any]:
-        """AI 응답 파싱"""
+        """AI 응답 파싱 (개선된 버전)"""
         result = {
             "summary": "",
             "category": "기타",
             "services": [],
             "location": "",
+            "phone_validation": "확인불가",
+            "fax_phone_duplicate": "확인불가",
             "contact_quality": "중",
             "website_quality": "중",
             "features": []
@@ -393,6 +617,10 @@ class HomepageAnalysisAgent(AIAgent):
                     result["services"] = [s.strip() for s in services_text.split(',')]
                 elif line.startswith('LOCATION:'):
                     result["location"] = line.replace('LOCATION:', '').strip()
+                elif line.startswith('PHONE_VALIDATION:'):
+                    result["phone_validation"] = line.replace('PHONE_VALIDATION:', '').strip()
+                elif line.startswith('FAX_PHONE_DUPLICATE:'):
+                    result["fax_phone_duplicate"] = line.replace('FAX_PHONE_DUPLICATE:', '').strip()
                 elif line.startswith('CONTACT_QUALITY:'):
                     result["contact_quality"] = line.replace('CONTACT_QUALITY:', '').strip()
                 elif line.startswith('WEBSITE_QUALITY:'):
@@ -405,6 +633,118 @@ class HomepageAnalysisAgent(AIAgent):
             self.logger.warning(f"AI 응답 파싱 오류: {e}")
         
         return result
+
+class ContactPageSearchAgent(AIAgent):
+    """연락처 페이지 검색 AI 에이전트 (새로 추가)"""
+    
+    def __init__(self, ai_manager: AIModelManager, logger: logging.Logger):
+        super().__init__("ContactPageSearchAgent", ai_manager, logger)
+        self.crawler_utils = CrawlerUtils()
+    
+    async def should_execute(self, context: CrawlingContext) -> bool:
+        """연락처 페이지 링크가 있을 때만 실행"""
+        return bool(context.extracted_data.get('contact_page_links'))
+    
+    async def execute(self, context: CrawlingContext) -> CrawlingContext:
+        """연락처 페이지에서 추가 정보 추출"""
+        try:
+            contact_links = context.extracted_data.get('contact_page_links', [])
+            org_name = context.organization.get('name', '')
+            
+            self.logger.info(f"📞 [{self.name}] 연락처 페이지 검색: {len(contact_links)}개 링크")
+            
+            additional_contacts = []
+            
+            for link_info in contact_links[:3]:  # 최대 3개 페이지만 확인
+                contact_data = await self._extract_contact_page(link_info['url'])
+                if contact_data:
+                    additional_contacts.append({
+                        'url': link_info['url'],
+                        'keyword': link_info['keyword'],
+                        'contacts': contact_data
+                    })
+            
+            if additional_contacts:
+                context.extracted_data['additional_contact_pages'] = additional_contacts
+                self._merge_additional_contacts(context, additional_contacts)
+                self.logger.info(f"✅ 추가 연락처 페이지 {len(additional_contacts)}개 처리 완료")
+            
+            context.current_stage = CrawlingStage.CONTACT_EXTRACTION
+            return context
+            
+        except Exception as e:
+            context.error_log.append(f"ContactPageSearchAgent 오류: {str(e)}")
+            self.logger.error(f"❌ [{self.name}] 오류: {e}")
+            return context
+    
+    async def _extract_contact_page(self, url: str) -> Optional[Dict]:
+        """연락처 페이지에서 정보 추출"""
+        driver = None
+        try:
+            driver = self.crawler_utils.setup_driver(headless=True)
+            if not driver:
+                return None
+            
+            driver.get(url)
+            time.sleep(2)
+            
+            page_text = driver.find_element(By.TAG_NAME, "body").text
+            
+            # 연락처 정보 추출 (HomepageAnalysisAgent와 동일한 로직)
+            contact_info = self._extract_contact_info_enhanced(page_text)
+            
+            return contact_info if any(contact_info.values()) else None
+            
+        except Exception as e:
+            self.logger.warning(f"연락처 페이지 추출 오류 {url}: {e}")
+            return None
+        finally:
+            if driver:
+                self.crawler_utils.safe_close_driver(driver)
+    
+    def _extract_contact_info_enhanced(self, text: str) -> Dict[str, List[str]]:
+        """강화된 연락처 정보 추출 (HomepageAnalysisAgent와 동일)"""
+        contact_info = {
+            "phones": [],
+            "faxes": [],
+            "emails": [],
+            "addresses": []
+        }
+        
+        try:
+            # 전화번호 추출
+            for pattern in PHONE_EXTRACTION_PATTERNS + ADDITIONAL_PHONE_PATTERNS:
+                matches = re.findall(pattern, text, re.IGNORECASE)
+                for match in matches:
+                    phone = PhoneUtils.format_phone_number(match)
+                    if phone and validate_phone_length(phone) and phone not in contact_info["phones"]:
+                        contact_info["phones"].append(phone)
+            
+            # 팩스번호 추출
+            for pattern in FAX_EXTRACTION_PATTERNS:
+                matches = re.findall(pattern, text, re.IGNORECASE)
+                for match in matches:
+                    fax = PhoneUtils.format_phone_number(match)
+                    if fax and validate_phone_length(fax) and fax not in contact_info["faxes"]:
+                        contact_info["faxes"].append(fax)
+            
+            # 이메일 추출
+            for pattern in EMAIL_EXTRACTION_PATTERNS:
+                matches = re.findall(pattern, text, re.IGNORECASE)
+                for match in matches:
+                    if self._is_valid_email(match) and match not in contact_info["emails"]:
+                        contact_info["emails"].append(match)
+        
+        except Exception as e:
+            self.logger.warning(f"연락처 정보 추출 오류: {e}")
+        
+        return contact_info
+    
+    def _is_valid_email(self, email: str) -> bool:
+        """이메일 유효성 확인"""
+        import re
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        return re.match(email_pattern, email) is not None
 
 class FaxSearchAgent(AIAgent):
     """팩스번호 검색 AI 에이전트 (faxextractor.py 로직 통합)"""
@@ -477,7 +817,7 @@ class FaxSearchAgent(AIAgent):
             matches = re.findall(pattern, text, re.IGNORECASE)
             for match in matches:
                 fax = PhoneUtils.format_phone_number(match)
-                if fax and fax not in fax_numbers:
+                if fax and validate_phone_length(fax) and fax not in fax_numbers:
                     fax_numbers.append(fax)
         
         return fax_numbers

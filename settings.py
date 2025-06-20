@@ -292,28 +292,12 @@ DUMMY_PHONE_PATTERNS = [
     r'999-999-9999'                                # 모두 9
 ]
 
-# ===== URL 크롤링 관련 상수 =====
+# ===== URL 크롤링 관련 상수 (개선) =====
 
-# 제외할 도메인 목록
-EXCLUDE_DOMAINS = [
+# 완전 제외할 도메인 목록 (검색엔진, 쇼핑몰 등)
+STRICT_EXCLUDE_DOMAINS = [
     # 검색 엔진들
-    "naver.com", "daum.net", "google.com", "yahoo.com",
-    
-    # 소셜 미디어
-    "facebook.com", "instagram.com", "twitter.com", "youtube.com",
-    "linkedin.com", "pinterest.com", "tiktok.com",
-    
-    # 네이버 서비스들
-    "blog.naver.com", "cafe.naver.com", "post.naver.com", 
-    "news.naver.com", "shopping.naver.com", "map.naver.com",
-    
-    # 위키 사이트들
-    "namu.wiki", "wiki.namu.wiki", "wikipedia.org", 
-    "en.wikipedia.org", "ko.wikipedia.org",
-    
-    # 블로그/개인서비스 플랫폼
-    "tistory.com", "blog.daum.net", "blog.me", "modoo.at",
-    "blogspot.com", "wordpress.com", "wix.com",
+    "google.com", "yahoo.com", "bing.com",
     
     # 쇼핑몰/마켓
     "11st.co.kr", "gmarket.co.kr", "auction.co.kr", 
@@ -323,25 +307,194 @@ EXCLUDE_DOMAINS = [
     "chosun.com", "donga.com", "joins.com", "hani.co.kr",
     "khan.co.kr", "pressian.com", "ytn.co.kr",
     
+    # 위키 사이트들
+    "namu.wiki", "wiki.namu.wiki", "wikipedia.org", 
+    "en.wikipedia.org", "ko.wikipedia.org",
+    
     # 기타
     "114.co.kr", "findall.co.kr", "cyworld.com", "me2day.net"
 ]
 
-# 제외할 URL 패턴들
-EXCLUDE_URL_PATTERNS = [
-    r"namu\.wiki/w/",             # 나무위키 문서
-    r"blog\.",                           # 네이버 블로그 서브도메인
-    r"cafe\.",                           # 네이버 카페 서브도메인
-    r"post\.",                           # 네이버 포스트 서브도메인
-    r"news\.",                           # 네이버 뉴스 서브도메인
-    r"wiki\.",                           # 네이버 위키 서브도메인
-    r"/board/",                         # 게시판 URL
-    r"/bbs/",                             # 게시판 URL
-    r"/community/",                 # 커뮤니티 URL
-    r"\.blogspot\.",               # 블로그스팟
-    r"\.tistory\.",                 # 티스토리
-    r"\.wordpress\."               # 워드프레스
+# 소규모 기관용 허용 소셜미디어 도메인 (파싱하되 별도 표시)
+SOCIAL_MEDIA_DOMAINS = {
+    "blog.naver.com": "네이버블로그",
+    "cafe.naver.com": "네이버카페", 
+    "post.naver.com": "네이버포스트",
+    "facebook.com": "페이스북",
+    "instagram.com": "인스타그램",
+    "youtube.com": "유튜브",
+    "tistory.com": "티스토리",
+    "blog.daum.net": "다음블로그",
+    "blogspot.com": "블로그스팟",
+    "modoo.at": "모두닷컴"
+}
+
+# 기존 EXCLUDE_DOMAINS를 STRICT_EXCLUDE_DOMAINS로 변경
+EXCLUDE_DOMAINS = STRICT_EXCLUDE_DOMAINS
+
+# 소규모 기관 판별 키워드
+SMALL_ORGANIZATION_KEYWORDS = [
+    "교회", "성당", "절", "사찰", "교회당", "예배당",
+    "학원", "교습소", "과외", "학습지", "공부방",
+    "의원", "치과", "한의원", "약국", "요양원",
+    "미용실", "헤어샵", "네일샵", "마사지",
+    "카페", "음식점", "식당", "베이커리", "제과점",
+    "부동산", "공인중개사", "세무사", "회계사",
+    "마을", "동네", "지역", "소규모", "개인"
 ]
+
+# 연락처 추출 개선된 패턴들
+CONTACT_NAVIGATION_KEYWORDS = [
+    # 한국어
+    "오시는길", "오시는 길", "찾아오시는길", "찾아오시는 길", 
+    "연락처", "연락처정보", "연락처 정보", "문의", "문의하기",
+    "위치", "위치정보", "위치 정보", "주소", "지도",
+    "전화", "전화번호", "연락", "상담", "예약",
+    
+    # 영어
+    "contact", "contact us", "contact info", "contact information",
+    "location", "directions", "find us", "visit us", "get directions",
+    "phone", "call", "reach us", "about us", "info",
+    
+    # 혼합
+    "Contact", "Location", "About", "Info"
+]
+
+# 추가 전화번호 저장을 위한 패턴
+ADDITIONAL_PHONE_PATTERNS = [
+    r'(?:담당자|책임자|관리자|상담원)[\s]*:?[\s]*(\d{2,3}[-\.\s]?\d{3,4}[-\.\s]?\d{4})',
+    r'(?:직통|내선|분관)[\s]*:?[\s]*(\d{2,3}[-\.\s]?\d{3,4}[-\.\s]?\d{4})',
+    r'(?:사무실|사무소|본점|지점)[\s]*:?[\s]*(\d{2,3}[-\.\s]?\d{3,4}[-\.\s]?\d{4})',
+    r'(?:예약|접수|상담)[\s]*:?[\s]*(\d{2,3}[-\.\s]?\d{3,4}[-\.\s]?\d{4})',
+    r'(?:핸드폰|휴대폰|모바일|Mobile|mobile|HP|hp)[\s]*:?[\s]*(\d{3}[-\.\s]?\d{3,4}[-\.\s]?\d{4})'
+]
+
+# 지역별 지역번호 매핑 (주소 기반 검증용)
+REGION_TO_AREA_CODE = {
+    # 서울
+    "서울": ["02"],
+    "서울시": ["02"],
+    "서울특별시": ["02"],
+    
+    # 경기도
+    "경기": ["031"],
+    "경기도": ["031"],
+    "수원": ["031"], "성남": ["031"], "안양": ["031"], "안산": ["031"],
+    "고양": ["031"], "용인": ["031"], "부천": ["031"], "의정부": ["031"],
+    
+    # 인천
+    "인천": ["032"],
+    "인천시": ["032"],
+    "인천광역시": ["032"],
+    
+    # 강원도
+    "강원": ["033"],
+    "강원도": ["033"],
+    "춘천": ["033"], "원주": ["033"], "강릉": ["033"],
+    
+    # 충청남도
+    "충남": ["041"],
+    "충청남도": ["041"],
+    "천안": ["041"], "아산": ["041"], "서산": ["041"],
+    
+    # 대전
+    "대전": ["042"],
+    "대전시": ["042"],
+    "대전광역시": ["042"],
+    
+    # 충청북도
+    "충북": ["043"],
+    "충청북도": ["043"],
+    "청주": ["043"], "충주": ["043"],
+    
+    # 세종
+    "세종": ["044"],
+    "세종시": ["044"],
+    "세종특별자치시": ["044"],
+    
+    # 부산
+    "부산": ["051"],
+    "부산시": ["051"],
+    "부산광역시": ["051"],
+    
+    # 울산
+    "울산": ["052"],
+    "울산시": ["052"],
+    "울산광역시": ["052"],
+    
+    # 대구
+    "대구": ["053"],
+    "대구시": ["053"],
+    "대구광역시": ["053"],
+    
+    # 경상북도
+    "경북": ["054"],
+    "경상북도": ["054"],
+    "포항": ["054"], "경주": ["054"], "안동": ["054"],
+    
+    # 경상남도
+    "경남": ["055"],
+    "경상남도": ["055"],
+    "창원": ["055"], "진주": ["055"], "통영": ["055"],
+    
+    # 전라남도
+    "전남": ["061"],
+    "전라남도": ["061"],
+    "목포": ["061"], "여수": ["061"], "순천": ["061"],
+    
+    # 광주
+    "광주": ["062"],
+    "광주시": ["062"],
+    "광주광역시": ["062"],
+    
+    # 전라북도
+    "전북": ["063"],
+    "전라북도": ["063"],
+    "전주": ["063"], "익산": ["063"], "군산": ["063"],
+    
+    # 제주
+    "제주": ["064"],
+    "제주도": ["064"],
+    "제주특별자치도": ["064"]
+}
+
+# 전화번호 검증 강화 함수들
+def validate_phone_length(phone: str) -> bool:
+    """전화번호 길이 검증 (9-11자리)"""
+    digits = re.sub(r'[^\d]', '', phone)
+    return 9 <= len(digits) <= 11
+
+def validate_phone_by_region(phone: str, address: str) -> bool:
+    """주소 기반 지역번호 검증"""
+    if not phone or not address:
+        return True  # 주소가 없으면 기본 검증만
+    
+    area_code = extract_phone_area_code(phone)
+    if not area_code:
+        return False
+    
+    # 주소에서 지역 추출
+    for region, codes in REGION_TO_AREA_CODE.items():
+        if region in address:
+            return area_code in codes
+    
+    return True  # 매칭되는 지역이 없으면 통과
+
+def is_phone_fax_duplicate(phone: str, fax: str) -> bool:
+    """전화번호와 팩스번호 중복 확인"""
+    if not phone or not fax:
+        return False
+    
+    # 숫자만 추출해서 비교
+    phone_digits = re.sub(r'[^\d]', '', phone)
+    fax_digits = re.sub(r'[^\d]', '', fax)
+    
+    return phone_digits == fax_digits
+
+def is_small_organization(org_name: str, category: str = "") -> bool:
+    """소규모 기관 여부 판별"""
+    text = f"{org_name} {category}".lower()
+    return any(keyword in text for keyword in SMALL_ORGANIZATION_KEYWORDS)
 
 # ===== 이메일 도메인 관련 상수 =====
 
