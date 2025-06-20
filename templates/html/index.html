@@ -3,192 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>네이버 지도 크롤링 제어 시스템</title>
+    <title>교회/기관 CRM 시스템</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="/static/css/style.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#eff6ff', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🗺️ 실시간 크롤링 제어 시스템</h1>
-            <p>기관 정보를 실시간으로 크롤링하고 결과를 확인하세요</p>
-        </div>
-
-        <div class="main-content">
-            <!-- 크롤링 설정 섹션 -->
-            <div class="section">
-                <h2>⚙️ 실시간 크롤링 설정</h2>
-                <div class="xpath-info">
-                    <h3>📍 현재 설정된 XPath</h3>
-                    <div class="xpath-display">
-                        <p><strong>검색창:</strong> //*[@id='input_search1748236527134']</p>
-                        <p><strong>검색버튼:</strong> //*[@id='home_search_input_box']/div/div/button</p>
-                        <p><strong>전화번호:</strong> //*[@id='app-root']/div/div/div/div[5]/div/div[2]/div[1]/div/div[3]/div/span[1]</p>
-                        <p><strong>팩스번호:</strong> 구글 검색 방식 사용 (매크로 감지 방지를 위한 드라이버 재시작)</p>
-                    </div>
-                </div>
-                <div class="control-buttons">
-                    <button class="btn btn-primary" onclick="startCrawling()">🚀 실시간 크롤링 시작</button>
-                    <button class="btn btn-danger" onclick="stopCrawling()">⏹️ 크롤링 중지</button>
-                </div>
-            </div>
-
-            <!-- 상태 패널 -->
-            <div class="status-panel">
-                <h2>📊 실시간 크롤링 상태</h2>
-                <div class="status-grid">
-                    <div class="status-item">
-                        <h3 id="processedCount">0</h3>
-                        <p>처리된 기관</p>
-                    </div>
-                    <div class="status-item">
-                        <h3 id="totalCount">0</h3>
-                        <p>전체 기관</p>
-                    </div>
-                    <div class="status-item current-org">
-                        <h3 id="currentOrganization">대기 중...</h3>
-                        <p>현재 처리 중인 기관</p>
-                    </div>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
-                </div>
-            </div>
-
-            <!-- 알림 영역 -->
-            <div id="alertArea"></div>
-
-            <!-- 실시간 결과 섹션 -->
-            <div class="section" id="realtimeSection">
-                <h2>📋 실시간 크롤링 결과 (엑셀 형식)</h2>
-                <div class="copy-buttons">
-                    <button class="copy-btn" onclick="copyTableData()">📋 전체 데이터 복사</button>
-                    <button class="copy-btn" onclick="copySelectedRows()">📋 선택된 행 복사</button>
-                    <button class="copy-btn" onclick="selectAllRows()">✅ 전체 선택</button>
-                </div>
-                <div id="realtimeResults" class="realtime-results">
-                    <div class="loading">실시간 크롤링 결과를 기다리는 중...</div>
-                </div>
-                <div class="result-info">
-                    <p>💡 <strong>결과 설명:</strong></p>
-                    <ul>
-                        <li>📞📠 완전일치: 전화번호와 팩스번호가 완전히 동일</li>
-                        <li>📞📠 유사패턴: 앞자리는 같고 뒷자리만 다름 (같은 기관의 다른 라인)</li>
-                        <li>📞📠 별도: 전화번호와 팩스번호가 완전히 다름</li>
-                        <li>📞 전화만: 전화번호만 발견</li>
-                        <li>📠 팩스만: 팩스번호만 발견</li>
-                        <li>❌ 없음: 연락처를 찾을 수 없음</li>
-                        <li>🔍 <strong>한국 번호 체계 검증:</strong> 서울(02), 경기(031), 인천(032), 강원(033), 충남(041), 대전(042), 충북(043), 부산(051), 울산(052), 대구(053), 경북(054), 경남(055), 전남(061), 광주(062), 전북(063), 제주(064), 인터넷전화(070), 핸드폰(010, 017)만 유효</li>
-                    </ul>
-                </div>
-            </div>
-
-            <!-- 다운로드 섹션 -->
-            <div class="section">
-                <h2>💾 결과 다운로드</h2>
-                <button class="btn btn-primary" onclick="downloadResults()">📥 결과 파일 다운로드</button>
-            </div>
-
-            <!-- 데이터 통계 섹션 -->
-            <div class="section" id="statisticsSection">
-                <h2>📊 데이터 통계 분석</h2>
-                <div class="control-buttons">
-                    <button class="btn btn-info" onclick="loadStatistics()">🔄 통계 새로고침</button>
-                    <button class="btn btn-secondary" onclick="toggleStatisticsDetails()">📋 상세 보기</button>
-                </div>
-                
-                <!-- 기본 통계 -->
-                <div class="statistics-overview" id="statisticsOverview">
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <h3 id="totalOrganizations">-</h3>
-                            <p>총 기관 수</p>
-                        </div>
-                        <div class="stat-card">
-                            <h3 id="phoneCount">-</h3>
-                            <p>전화번호 보유</p>
-                        </div>
-                        <div class="stat-card">
-                            <h3 id="faxCount">-</h3>
-                            <p>팩스번호 보유</p>
-                        </div>
-                        <div class="stat-card">
-                            <h3 id="emailCount">-</h3>
-                            <p>이메일 보유</p>
-                        </div>
-                    </div>
-                    
-                    <!-- 품질 지표 -->
-                    <div class="quality-metrics">
-                        <h3>🎯 데이터 품질 지표</h3>
-                        <div class="quality-bars">
-                            <div class="quality-item">
-                                <span>전화번호 유효성</span>
-                                <div class="progress-bar">
-                                    <div class="progress-fill" id="phoneValidityBar" style="width: 0%"></div>
-                                </div>
-                                <span id="phoneValidityText">0%</span>
-                            </div>
-                            <div class="quality-item">
-                                <span>팩스번호 유효성</span>
-                                <div class="progress-bar">
-                                    <div class="progress-fill" id="faxValidityBar" style="width: 0%"></div>
-                                </div>
-                                <span id="faxValidityText">0%</span>
-                            </div>
-                            <div class="quality-item">
-                                <span>정보 완성도</span>
-                                <div class="progress-bar">
-                                    <div class="progress-fill" id="completenessBar" style="width: 0%"></div>
-                                </div>
-                                <span id="completenessText">0%</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- 상세 통계 (토글) -->
-                <div class="statistics-details" id="statisticsDetails" style="display: none;">
-                    <!-- 지역별 분포 -->
-                    <div class="regional-stats">
-                        <h3>🗺️ 지역별 분포</h3>
-                        <div id="regionalChart" class="chart-container">
-                            <div class="loading">지역별 데이터 로딩 중...</div>
-                        </div>
-                    </div>
-                    
-                    <!-- 카테고리별 통계 -->
-                    <div class="category-stats">
-                        <h3>📂 카테고리별 통계</h3>
-                        <div id="categoryChart" class="chart-container">
-                            <div class="loading">카테고리 데이터 로딩 중...</div>
-                        </div>
-                    </div>
-                    
-                    <!-- 이메일 도메인 분포 -->
-                    <div class="email-stats">
-                        <h3>📧 이메일 도메인 분포</h3>
-                        <div id="emailChart" class="chart-container">
-                            <div class="loading">이메일 데이터 로딩 중...</div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- 통계 정보 -->
-                <div class="statistics-info">
-                    <p>💡 <strong>통계 설명:</strong></p>
-                    <ul>
-                        <li>📊 <strong>기본 통계:</strong> 전체 기관 수와 연락처 보유 현황</li>
-                        <li>🎯 <strong>품질 지표:</strong> 전화번호/팩스번호 유효성 및 정보 완성도</li>
-                        <li>🗺️ <strong>지역별 분포:</strong> 한국 지역코드 기준 연락처 분포</li>
-                        <li>📂 <strong>카테고리별 통계:</strong> 기관 유형별 연락처 보유 현황</li>
-                        <li>📧 <strong>이메일 분석:</strong> 도메인별 분류 (포털/기업/정부 등)</li>
-                        <li>🔄 <strong>실시간 업데이트:</strong> 크롤링 완료 후 자동 갱신</li>
-                    </ul>
-                </div>
+<body class="bg-gray-50 overflow-hidden">
+    <!-- React 스타일 루트 컨테이너 -->
+    <div id="app-root" class="h-screen flex flex-col">
+        <!-- JavaScript가 모든 것을 렌더링 -->
+        <div id="loading-screen" class="h-screen flex items-center justify-center">
+            <div class="text-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                <p class="text-gray-600">CRM 시스템 로딩 중...</p>
             </div>
         </div>
     </div>
 
+    <!-- Scripts - 순서 중요! -->
+    <script src="/static/js/ui.js"></script>
     <script src="/static/js/main.js"></script>
+    
+    <!-- 디버깅 스크립트 -->
+    <script>
+        console.log('🔧 HTML 스크립트 실행됨');
+        
+        // 5초 후에도 로딩 화면이 보이면 오류 표시
+        setTimeout(() => {
+            const loadingScreen = document.getElementById('loading-screen');
+            if (loadingScreen && loadingScreen.style.display !== 'none') {
+                console.error('❌ 5초 후에도 로딩 화면이 표시됨 - JavaScript 초기화 실패');
+                document.getElementById('app-root').innerHTML = `
+                    <div class="h-screen flex items-center justify-center bg-red-50">
+                        <div class="text-center">
+                            <i class="fas fa-exclamation-triangle text-6xl text-red-500 mb-4"></i>
+                            <h1 class="text-2xl font-bold text-red-800 mb-2">초기화 실패</h1>
+                            <p class="text-red-600 mb-4">JavaScript 파일 로딩에 문제가 있습니다.</p>
+                            <p class="text-red-500 mb-4 text-sm">개발자 도구 콘솔을 확인하세요.</p>
+                            <button onclick="window.location.reload()" 
+                                    class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded">
+                                다시 시도
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+        }, 5000);
+    </script>
 </body>
-</html> 
+</html>

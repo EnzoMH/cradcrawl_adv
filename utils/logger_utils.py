@@ -9,7 +9,7 @@ import logging
 import os
 from datetime import datetime
 from typing import Optional
-from constants import LOGGER_NAMES, LOG_FORMAT
+from settings import LOGGER_NAMES, LOG_FORMAT
 
 class LoggerUtils:
     """로거 설정 관련 유틸리티 클래스 - 중복 제거"""

@@ -126,6 +126,119 @@ class UnifiedCrawler:
         
         return result
     
+    async def process_json_file_async(self, json_file_path: str, test_mode: bool = False, test_count: int = 10, progress_callback=None) -> List[Dict]:
+        """🔧 app.py 호환성을 위한 래퍼 메서드"""
+        try:
+            # JSON 파일 로드
+            data = FileUtils.load_json(json_file_path)
+            
+            # 데이터 전처리 (app.py와 동일한 방식)
+            organizations = []
+            if isinstance(data, dict):
+                for category, orgs in data.items():
+                    if isinstance(orgs, list):
+                        for org in orgs:
+                            if isinstance(org, dict):
+                                org["category"] = category
+                                organizations.append(org)
+            elif isinstance(data, list):
+                organizations = [org for org in data if isinstance(org, dict)]
+            
+            # 테스트 모드 처리
+            if test_mode and test_count:
+                organizations = organizations[:test_count]
+            
+            # progress_callback 저장
+            self.progress_callback = progress_callback
+            
+            # 처리 실행
+            results = await self.process_organizations_with_callback(organizations)
+            
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"JSON 파일 처리 실패: {e}")
+            return []
+    
+    async def process_organizations_with_callback(self, organizations: List[Dict]) -> List[Dict]:
+        """콜백 함수가 있는 조직 처리"""
+        if not organizations:
+            return []
+        
+        self.stats["start_time"] = datetime.now()
+        self.stats["total_processed"] = len(organizations)
+        
+        results = []
+        
+        for i, org in enumerate(organizations, 1):
+            try:
+                # 처리 시작 콜백
+                if hasattr(self, 'progress_callback') and self.progress_callback:
+                    callback_data = {
+                        'name': org.get('name', 'Unknown'),
+                        'category': org.get('category', ''),
+                        'homepage_url': org.get('homepage', ''),
+                        'status': 'processing',
+                        'current_step': f'{i}/{len(organizations)}',
+                        'processing_time': 0
+                    }
+                    try:
+                        self.progress_callback(callback_data)
+                    except Exception as e:
+                        self.logger.error(f"콜백 실행 실패: {e}")
+                
+                # 실제 처리
+                start_time = time.time()
+                processed_org = await self.process_single_organization(org, i)
+                processing_time = time.time() - start_time
+                
+                results.append(processed_org)
+                self.stats["successful"] += 1
+                
+                # 처리 완료 콜백
+                if hasattr(self, 'progress_callback') and self.progress_callback:
+                    callback_data = {
+                        'name': processed_org.get('name', 'Unknown'),
+                        'category': processed_org.get('category', ''),
+                        'homepage_url': processed_org.get('homepage', ''),
+                        'status': 'completed',
+                        'current_step': f'{i}/{len(organizations)}',
+                        'processing_time': processing_time,
+                        'phone': processed_org.get('phone', ''),
+                        'fax': processed_org.get('fax', ''),
+                        'email': processed_org.get('email', ''),
+                        'address': processed_org.get('address', ''),
+                        'extraction_method': processed_org.get('extraction_method', 'unified_crawler')
+                    }
+                    try:
+                        self.progress_callback(callback_data)
+                    except Exception as e:
+                        self.logger.error(f"콜백 실행 실패: {e}")
+                
+                # 딜레이
+                await asyncio.sleep(self.config.get("default_delay", 2))
+                
+            except Exception as e:
+                self.logger.error(f"❌ 조직 처리 실패 [{i}]: {org.get('name', 'Unknown')} - {e}")
+                self.stats["failed"] += 1
+                
+                # 실패 콜백
+                if hasattr(self, 'progress_callback') and self.progress_callback:
+                    callback_data = {
+                        'name': org.get('name', 'Unknown'),
+                        'status': 'failed',
+                        'error_message': str(e)
+                    }
+                    try:
+                        self.progress_callback(callback_data)
+                    except Exception as e:
+                        self.logger.error(f"콜백 실행 실패: {e}")
+                
+                results.append(org)
+        
+        self.stats["end_time"] = datetime.now()
+        return results
+    
     async def search_homepage(self, org_name: str) -> Optional[str]:
         """홈페이지 URL 검색"""
         try:
