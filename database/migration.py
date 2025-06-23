@@ -531,7 +531,7 @@ class AIAgenticDataMigrator:
             "sources": {},
             "errors": []
         }
-        
+    
         # AI 분석 결과
         self.analyses = []
         self.integration_strategy = None
@@ -652,7 +652,7 @@ class AIAgenticDataMigrator:
             print("🤖 Integration Agent가 통합 전략 설계 중...")
             self.integration_strategy = self.integration_agent.design_integration_strategy(self.analyses)
             print("✅ 통합 전략 설계 완료")
-        else:
+                else:
             print("🔧 수동 통합 전략 사용")
             self.integration_strategy = {
                 "agent": "Manual",
@@ -788,8 +788,8 @@ class AIAgenticDataMigrator:
                 else:
                     # 주소가 없으면 상호명 + 전화번호로 체크
                     phone = org_data.get('phone', '').strip()
-                    existing = conn.execute('''
-                    SELECT COUNT(*) FROM organizations 
+                existing = conn.execute('''
+                SELECT COUNT(*) FROM organizations 
                     WHERE name = ? AND phone = ? AND is_active = 1
                     ''', (name, phone)).fetchone()[0]
                 
@@ -945,7 +945,7 @@ class AIAgenticDataMigrator:
         
         if self.stats['total_processed'] > 0:
             success_rate = (self.stats['successfully_migrated'] / self.stats['total_processed']) * 100
-            print(f"📊 성공률: {success_rate:.1f}%")
+        print(f"📊 성공률: {success_rate:.1f}%")
         
         # 최종 DB 통계
         try:
@@ -1049,20 +1049,20 @@ def main():
         
         # 5. 데이터 마이그레이션 실행
         success = migrator.migrate_all_sources(batch_size=1000)
-        
-        end_time = datetime.now()
-        duration = end_time - start_time
-        
+    
+    end_time = datetime.now()
+    duration = end_time - start_time
+    
         # 6. 최종 결과 요약
         migrator.print_final_summary()
         print(f"⏱️  총 소요 시간: {duration}")
-        
-        if success:
+    
+    if success:
             print("\n🎉 AI Agentic Workflow 마이그레이션이 성공적으로 완료되었습니다!")
             print(f"📊 데이터베이스: {migrator.db.db_path}")
-            return True
-        else:
-            print("\n❌ 마이그레이션 중 오류가 발생했습니다.")
+        return True
+    else:
+        print("\n❌ 마이그레이션 중 오류가 발생했습니다.")
             return False
         
     except Exception as e:
