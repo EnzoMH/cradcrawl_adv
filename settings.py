@@ -193,6 +193,7 @@ AREA_CODE_LENGTH_RULES = {
     "063": {"min_length": 10, "max_length": 11},   # 전북
     "064": {"min_length": 10, "max_length": 11},   # 제주
     "070": {"min_length": 11, "max_length": 11},   # 인터넷전화
+    "080": {"min_length": 11, "max_length": 11},   # 인터넷전화
     "010": {"min_length": 11, "max_length": 11},   # 핸드폰
     "017": {"min_length": 11, "max_length": 11}    # 핸드폰
 }
