@@ -1049,14 +1049,14 @@ def main():
         
         # 5. 데이터 마이그레이션 실행
         success = migrator.migrate_all_sources(batch_size=1000)
-    
+        
         end_time = datetime.now()
         duration = end_time - start_time
-    
+        
         # 6. 최종 결과 요약
         migrator.print_final_summary()
         print(f"⏱️  총 소요 시간: {duration}")
-    
+        
         if success:
             print("\n🎉 AI Agentic Workflow 마이그레이션이 성공적으로 완료되었습니다!")
             print(f"📊 데이터베이스: {migrator.db.db_path}")
