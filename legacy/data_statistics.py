@@ -14,7 +14,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from collections import Counter, defaultdict
 import traceback
 
-from constants import (
+from settings import (
     KOREAN_AREA_CODES,
     AREA_CODE_LENGTH_RULES,
     PORTAL_EMAIL_DOMAINS,

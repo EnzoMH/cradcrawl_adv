@@ -26,7 +26,7 @@ except ImportError:
 
 # AI 관련 라이브러리 (선택적)
 try:
-    from ai_helpers import AIModelManager
+    from .ai_helpers import AIModelManager
     AI_AVAILABLE = True
 except ImportError:
     AI_AVAILABLE = False

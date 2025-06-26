@@ -308,16 +308,13 @@ class ContactValidator:
         
         return result
 
-from ai_helpers import AIModelManager
-import os
-from dotenv import load_dotenv
-
 import os
 import logging
 import re
 from typing import Dict, List, Optional, Tuple, Any
-from ai_helpers import AIModelManager
-from legacy.constants import *
+from dotenv import load_dotenv
+from .ai_helpers import AIModelManager
+from .settings import *
 
 class AIValidator:
     """AI를 활용한 고급 검증 시스템"""

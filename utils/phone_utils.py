@@ -35,7 +35,7 @@ if project_root not in sys.path:
 
 # settings.py에서 필요한 함수들과 상수들 import
 try:
-    from settings import (
+    from .settings import (
         KOREAN_AREA_CODES,
         VALID_AREA_CODES, 
         AREA_CODE_LENGTH_RULES,
