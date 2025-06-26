@@ -652,14 +652,14 @@ class AIAgenticDataMigrator:
             print("🤖 Integration Agent가 통합 전략 설계 중...")
             self.integration_strategy = self.integration_agent.design_integration_strategy(self.analyses)
             print("✅ 통합 전략 설계 완료")
-                else:
+        else:
             print("🔧 수동 통합 전략 사용")
             self.integration_strategy = {
                 "agent": "Manual",
                 "strategy": "AI 기능 비활성화로 기본 전략 사용",
                 "timestamp": datetime.now().isoformat()
             }
-    
+
     def execute_review_phase(self):
         """검토 단계 실행"""
         print("\n🔍 Phase 3: 설계 검토")
