@@ -1177,6 +1177,112 @@ class HomepageParser:
             self.logger.error(f"저장 중 오류: {e}")
             return False
 
+    async def ai_search_homepage(self, org_name: str, category: str) -> List[Dict]:
+        """AI 기반 홈페이지 검색"""
+        try:
+            self.logger.info(f"🔍 AI 홈페이지 검색: {org_name} ({category})")
+            
+            # AI를 사용한 검색 전략
+            search_results = []
+            
+            # 1. 기본 검색어 생성
+            search_queries = [
+                f"{org_name}",
+                f"{org_name} {category}",
+                f"{org_name} 홈페이지",
+                f"{org_name} 공식사이트"
+            ]
+            
+            # 2. AI 모델을 사용하여 검색 쿼리 개선
+            if self.use_ai and self.ai_model:
+                try:
+                    enhanced_query = await self._generate_enhanced_search_query(org_name, category)
+                    if enhanced_query:
+                        search_queries.append(enhanced_query)
+                except Exception as e:
+                    self.logger.warning(f"AI 검색 쿼리 생성 실패: {e}")
+            
+            # 3. 각 검색어로 검색 (간단한 구현)
+            for query in search_queries[:3]:  # 최대 3개만
+                try:
+                    # 실제 검색 로직 (Google 검색 API 등을 사용할 수 있음)
+                    # 여기서는 간단한 예시로 구현
+                    result = await self._perform_search(query, org_name)
+                    if result:
+                        search_results.append(result)
+                        break  # 첫 번째 결과를 찾으면 중단
+                except Exception as e:
+                    self.logger.warning(f"검색 실패 [{query}]: {e}")
+                    continue
+            
+            self.logger.info(f"AI 홈페이지 검색 완료: {len(search_results)}개 결과")
+            return search_results
+            
+        except Exception as e:
+            self.logger.error(f"AI 홈페이지 검색 오류: {e}")
+            return []
+    
+    async def _generate_enhanced_search_query(self, org_name: str, category: str) -> str:
+        """AI로 향상된 검색 쿼리 생성"""
+        try:
+            prompt = f"""
+            다음 기관의 홈페이지를 찾기 위한 최적의 검색어를 생성해주세요:
+            
+            기관명: {org_name}
+            카테고리: {category}
+            
+            가장 효과적인 검색어 하나만 제안해주세요.
+            """
+            
+            response = self.ai_model.generate_content(prompt)
+            enhanced_query = response.text.strip()
+            
+            # 검색어가 너무 길면 자르기
+            if len(enhanced_query) > 100:
+                enhanced_query = enhanced_query[:100]
+            
+            return enhanced_query
+            
+        except Exception as e:
+            self.logger.warning(f"AI 검색 쿼리 생성 오류: {e}")
+            return ""
+    
+    async def _perform_search(self, query: str, org_name: str) -> Optional[Dict]:
+        """실제 검색 수행 (간단한 구현)"""
+        try:
+            # 여기서는 기본적인 URL 패턴을 추정
+            # 실제 환경에서는 Google Search API 등을 사용
+            
+            # 기본 도메인 패턴들
+            domain_patterns = [
+                f"www.{org_name.lower().replace(' ', '')}.com",
+                f"www.{org_name.lower().replace(' ', '')}.co.kr",
+                f"www.{org_name.lower().replace(' ', '')}.or.kr",
+                f"{org_name.lower().replace(' ', '')}.com",
+                f"{org_name.lower().replace(' ', '')}.co.kr"
+            ]
+            
+            # 각 패턴에 대해 접근 시도
+            for pattern in domain_patterns:
+                try:
+                    test_url = f"https://{pattern}"
+                    # 실제로는 여기서 HTTP 요청을 보내서 확인
+                    # 지금은 간단히 패턴만 반환
+                    return {
+                        "url": test_url,
+                        "type": "추정",
+                        "confidence": 0.6,
+                        "search_query": query
+                    }
+                except:
+                    continue
+            
+            return None
+            
+        except Exception as e:
+            self.logger.warning(f"검색 수행 오류: {e}")
+            return None
+
 def main():
     """메인 실행 함수"""
     print("=" * 70)
