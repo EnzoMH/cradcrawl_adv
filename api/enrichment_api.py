@@ -17,7 +17,7 @@ from services.organization_service import OrganizationService
 from utils.logger_utils import LoggerUtils
 
 router = APIRouter(prefix="/api/enrichment", tags=["연락처 보강"])
-logger = LoggerUtils.setup_logger("enrichment_api", file_logging=False)
+logger = LoggerUtils.setup_logger(name="enrichment_api", file_logging=False)
 
 # Pydantic 모델들
 class EnrichmentRequestModel(BaseModel):

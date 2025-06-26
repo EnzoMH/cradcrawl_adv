@@ -55,7 +55,7 @@ class API {
 
     // ===== 대시보드 API =====
     static async getDashboardStats() {
-        return this.get('/api/statistics');
+        return this.get('/api/statistics/overview');
     }
 
     static async getDashboardData() {
@@ -92,8 +92,14 @@ class API {
     }
 
     // ===== 연락처 보강 API =====
-    static async getEnrichmentCandidates() {
-        return this.get('/api/organizations/enrichment-candidates');
+    static async getEnrichmentCandidates(params = {}) {
+        // 기본 파라미터 설정
+        const defaultParams = {
+            limit: 20
+        };
+        
+        const queryParams = { ...defaultParams, ...params };
+        return this.get('/api/organizations/enrichment-candidates', queryParams);
     }
 
     static async enrichSingle(orgId) {
@@ -105,6 +111,7 @@ class API {
     }
 
     static async startAutoEnrichment(limit = 100) {
+        // GET 파라미터로 전달하도록 수정
         return this.post(`/api/enrichment/auto?limit=${limit}`);
     }
 
@@ -146,9 +153,49 @@ class API {
         return this.delete(`/api/activities/${id}`);
     }
 
-    // ===== 통계 API =====
+    // ===== 통계 분석 API =====
+    static async getStatisticsOverview() {
+        return this.get('/api/statistics/overview');
+    }
+
+    static async getContactAnalysis() {
+        return this.get('/api/statistics/contact-analysis');
+    }
+
+    static async getGeographicDistribution() {
+        return this.get('/api/statistics/geographic-distribution');
+    }
+
+    static async getEmailAnalysis() {
+        return this.get('/api/statistics/email-analysis');
+    }
+
+    static async getCategoryBreakdown() {
+        return this.get('/api/statistics/category-breakdown');
+    }
+
+    static async getQualityReport() {
+        return this.get('/api/statistics/quality-report');
+    }
+
+    static async getEnrichmentHistory(days = 30) {
+        return this.get('/api/statistics/enrichment-history', { days });
+    }
+
+    static async generateStatisticsReport() {
+        return this.post('/api/statistics/generate-report');
+    }
+
+    static async exportStatisticsData(format = 'json', includeDetails = true) {
+        return this.get('/api/statistics/export-data', { 
+            format, 
+            include_details: includeDetails 
+        });
+    }
+
+    // ===== 기존 통계 API (하위 호환성) =====
     static async getStatistics(type = 'all') {
-        return this.get('/api/statistics', { type });
+        return this.get('/api/statistics/overview', { type });
     }
 
     static async exportData(format = 'excel', filters = {}) {
@@ -157,5 +204,70 @@ class API {
     }
 }
 
+// ===== APIClient 클래스 (statistics.js 호환성) =====
+class APIClient {
+    constructor(baseURL = '') {
+        this.baseURL = baseURL;
+    }
+
+    async request(url, options = {}) {
+        const config = {
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            },
+            ...options
+        };
+        
+        try {
+            const response = await fetch(`${this.baseURL}${url}`, config);
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.message || `HTTP ${response.status}`);
+            }
+            
+            const data = await response.json();
+            return data;
+            
+        } catch (error) {
+            console.error(`API 요청 실패 [${url}]:`, error);
+            throw error;
+        }
+    }
+
+    async get(url, options = {}) {
+        const { params, ...otherOptions } = options;
+        
+        if (params) {
+            const queryString = new URLSearchParams(params).toString();
+            url = queryString ? `${url}?${queryString}` : url;
+        }
+        
+        return this.request(url, { method: 'GET', ...otherOptions });
+    }
+
+    async post(url, data = {}, options = {}) {
+        return this.request(url, {
+            method: 'POST',
+            body: JSON.stringify(data),
+            ...options
+        });
+    }
+
+    async put(url, data = {}, options = {}) {
+        return this.request(url, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+            ...options
+        });
+    }
+
+    async delete(url, options = {}) {
+        return this.request(url, { method: 'DELETE', ...options });
+    }
+}
+
 // ===== 전역 접근 가능하도록 설정 =====
-window.API = API; 
+window.API = API;
+window.APIClient = APIClient; 

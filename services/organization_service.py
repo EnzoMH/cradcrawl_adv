@@ -32,7 +32,7 @@ class OrganizationService:
     def __init__(self):
         """초기화"""
         self.db = get_database()
-        self.logger = LoggerUtils.setup_logger("organization_service", file_logging=False)
+        self.logger = LoggerUtils.setup_logger(name="organization_service", file_logging=False)
         self.logger.info("🏢 기관 관리 서비스 초기화 완료")
     
     def get_organizations_with_missing_contacts(self, limit: int = 100) -> List[Dict[str, Any]]:

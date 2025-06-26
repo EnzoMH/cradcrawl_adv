@@ -13,7 +13,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
 
 from database.database import get_database
-from crawler_main import UnifiedCrawler
+from crawler_main import ModularUnifiedCrawler
 from utils.logger_utils import LoggerUtils
 
 @dataclass
@@ -41,7 +41,7 @@ class ContactEnrichmentService:
     def __init__(self):
         """초기화"""
         self.db = get_database()
-        self.logger = LoggerUtils.setup_logger("contact_enrichment", file_logging=False)
+        self.logger = LoggerUtils.setup_logger(name="contact_enrichment", file_logging=False)
         self.crawler = None
         
         # 통계
@@ -60,15 +60,27 @@ class ContactEnrichmentService:
         
         self.logger.info("🔍 연락처 보강 서비스 초기화 완료")
     
-    def get_crawler(self) -> UnifiedCrawler:
-        """크롤러 인스턴스 가져오기 (지연 초기화)"""
+    def get_crawler(self) -> ModularUnifiedCrawler:
+        """크롤러 인스턴스 가져오기 (개선된 버전)"""
         if not self.crawler:
             try:
-                self.crawler = UnifiedCrawler()
-                self.logger.info("🤖 UnifiedCrawler 초기화 성공")
+                # 진행 상황 콜백 함수 정의
+                def progress_callback(data):
+                    try:
+                        status = data.get('status', 'unknown')
+                        name = data.get('name', 'Unknown')
+                        self.logger.info(f"🔄 크롤링 진행: {name} - {status}")
+                    except Exception as e:
+                        self.logger.debug(f"콜백 오류: {e}")
+                
+                # ModularUnifiedCrawler 초기화 (콜백 포함)
+                self.crawler = ModularUnifiedCrawler(progress_callback=progress_callback)
+                self.logger.info("🤖 ModularUnifiedCrawler 초기화 성공 (콜백 포함)")
+                
             except Exception as e:
-                self.logger.error(f"❌ UnifiedCrawler 초기화 실패: {e}")
+                self.logger.error(f"❌ ModularUnifiedCrawler 초기화 실패: {e}")
                 raise
+        
         return self.crawler
     
     def find_organizations_with_missing_contacts(self, limit: int = 100) -> List[EnrichmentRequest]:
@@ -132,20 +144,26 @@ class ContactEnrichmentService:
             return []
     
     async def enrich_single_organization(self, request: EnrichmentRequest) -> EnrichmentResult:
-        """단일 기관의 연락처 정보 보강"""
+        """단일 기관의 연락처 정보 보강 - crawler_main.py 완전 통합"""
         start_time = datetime.now()
         
         try:
             self.logger.info(f"🔍 연락처 보강 시작: {request.org_name} (ID: {request.org_id})")
             self.logger.info(f"  📋 누락 필드: {', '.join(request.missing_fields)}")
             
-            # 크롤러로 정보 검색
+            # 🔧 수정: 기존 크롤러 사용 (매번 새로 만들지 않음)
             crawler = self.get_crawler()
+            
+            # 🔧 수정: 모듈 초기화 확인 및 실행
+            if not hasattr(crawler, '_modules_initialized') or not crawler._modules_initialized:
+                crawler.initialize_modules()
+                crawler._modules_initialized = True
+                self.logger.info("🔧 크롤러 모듈 초기화 완료")
             
             # 기관 정보를 크롤러 형식으로 변환
             org_data = {
                 "name": request.org_name,
-                "category": "기관",  # 기본값
+                "category": "기관",
                 "homepage": "",
                 "phone": "",
                 "fax": "",
@@ -153,17 +171,54 @@ class ContactEnrichmentService:
                 "address": ""
             }
             
-            # 크롤러로 단일 기관 처리
-            processed_org = await crawler.process_single_organization(org_data, 1)
+            # 🚀 실제 크롤링 실행 - crawler_main.py의 강력한 기능 활용
+            try:
+                # 1. 홈페이지 검색
+                if not org_data.get('homepage'):
+                    homepage_result = await crawler.search_homepage(request.org_name)
+                    if homepage_result and homepage_result.get('homepage'):
+                        org_data['homepage'] = homepage_result['homepage']
+                        self.logger.info(f"  🌐 홈페이지 발견: {homepage_result['homepage']}")
+                
+                # 2. 홈페이지에서 연락처 추출
+                if org_data.get('homepage'):
+                    homepage_details = await crawler.extract_details_from_homepage(org_data['homepage'])
+                    
+                    # 결과 병합
+                    for field in ['phone', 'fax', 'email', 'address']:
+                        if homepage_details.get(field) and not org_data.get(field):
+                            org_data[field] = homepage_details[field]
+                            self.logger.info(f"  ✅ 홈페이지에서 {field} 발견: {homepage_details[field]}")
+                
+                # 3. 구글 검색으로 누락 정보 보완
+                missing_fields = [field for field in request.missing_fields 
+                                if not org_data.get(field) or org_data[field].strip() == ""]
+                
+                if missing_fields:
+                    self.logger.info(f"  🔍 구글 검색으로 누락 정보 검색: {missing_fields}")
+                    google_results = await crawler.search_missing_info(request.org_name, missing_fields)
+                    
+                    # 구글 검색 결과 병합
+                    for field, value in google_results.items():
+                        if value and value.strip() and not org_data.get(field):
+                            org_data[field] = value
+                            self.logger.info(f"  ✅ 구글 검색에서 {field} 발견: {value}")
+                
+                # 4. 데이터 검증 및 정리
+                org_data = crawler.validate_and_clean_data(org_data)
+                
+            except Exception as crawl_error:
+                self.logger.error(f"  ❌ 크롤링 과정 오류: {crawl_error}")
+                # 크롤링 실패해도 계속 진행
             
             # 결과에서 찾은 데이터 추출
             found_data = {}
             still_missing = []
             
             for field in request.missing_fields:
-                value = processed_org.get(field, "")
-                if value and value.strip():
-                    found_data[field] = value.strip()
+                value = org_data.get(field, "")
+                if value and str(value).strip() and str(value).strip() != "":
+                    found_data[field] = str(value).strip()
                     self.stats["fields_found"][field] += 1
                     self.logger.info(f"  ✅ {field} 발견: {value}")
                 else:
@@ -189,8 +244,10 @@ class ContactEnrichmentService:
             
             if result.success:
                 self.stats["successful_enrichments"] += 1
+                self.logger.info(f"  🎉 보강 성공: {len(found_data)}개 필드 발견")
             else:
                 self.stats["failed_enrichments"] += 1
+                self.logger.warning(f"  ⚠️ 보강 실패: 연락처 정보를 찾을 수 없음")
             
             self.stats["total_processed"] += 1
             
@@ -211,7 +268,7 @@ class ContactEnrichmentService:
                 error_message=str(e),
                 processing_time=processing_time
             )
-    
+            
     def update_organization_contacts(self, org_id: int, contact_data: Dict[str, str], updated_by: str) -> bool:
         """기관의 연락처 정보 업데이트"""
         try:
@@ -223,7 +280,7 @@ class ContactEnrichmentService:
             # 크롤링 메타데이터 추가
             crawling_metadata = {
                 "last_enrichment": datetime.now().isoformat(),
-                "enrichment_source": "UnifiedCrawler",
+                "enrichment_source": "ModularUnifiedCrawler",
                 "found_fields": list(contact_data.keys())
             }
             
@@ -341,6 +398,36 @@ class ContactEnrichmentService:
                 "processed_count": 0,
                 "successful_count": 0,
                 "results": []
+            }
+    
+    async def start_auto_enrichment(self, limit: int = 100, max_concurrent: int = 3) -> Dict[str, Any]:
+        """자동 보강 시작 (백그라운드 작업용) - crm_app.py 호출용"""
+        try:
+            import uuid
+            from datetime import datetime
+            
+            # 작업 ID 생성
+            job_id = f"auto_enrichment_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
+            
+            self.logger.info(f"🚀 자동 보강 작업 시작: {job_id} (최대 {limit}개 기관)")
+            
+            # 실제 보강 실행 (기존 메서드 활용)
+            result = await self.auto_enrich_missing_contacts(limit, max_concurrent)
+            
+            # 작업 ID 추가하여 반환
+            result["job_id"] = job_id
+            result["estimated_time"] = limit * 2  # 기관당 평균 2초 예상
+            
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"❌ 자동 보강 시작 실패: {e}")
+            return {
+                "status": "error",
+                "message": f"자동 보강 시작 실패: {str(e)}",
+                "job_id": None,
+                "processed_count": 0,
+                "successful_count": 0
             }
     
     def print_enrichment_statistics(self, results: List[EnrichmentResult]):

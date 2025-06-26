@@ -998,7 +998,8 @@ class EnhancedUnifiedCrawler:
     def __init__(self, config_override=None):
         """초기화"""
         self.config = config_override or CRAWLING_CONFIG
-        self.logger = LoggerUtils.setup_crawler_logger()
+        # 수정: crawler_name 매개변수 추가
+        self.logger = LoggerUtils.setup_crawler_logger("enhanced_unified_crawler")
         self.ai_manager = AIModelManager()
         
         # AI 에이전트들 초기화

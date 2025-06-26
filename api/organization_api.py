@@ -17,7 +17,7 @@ from database.database import get_database
 from utils.logger_utils import LoggerUtils
 
 router = APIRouter(prefix="/api/organizations", tags=["기관 관리"])
-logger = LoggerUtils.setup_logger("organization_api", file_logging=False)
+logger = LoggerUtils.setup_logger(name="organization_api", file_logging=False)
 
 # Pydantic 모델들
 class OrganizationUpdateModel(BaseModel):

@@ -22,10 +22,18 @@ function EnrichmentApp() {
         try {
             setLoading(true);
             const result = await API.getEnrichmentCandidates();
-            setCandidates(Array.isArray(result) ? result : []);
+            
+            // API 응답 구조 변경에 대응
+            if (result.status === 'success' && result.candidates) {
+                setCandidates(Array.isArray(result.candidates) ? result.candidates : []);
+            } else {
+                // 기존 형식도 지원 (하위 호환성)
+                setCandidates(Array.isArray(result) ? result : []);
+            }
         } catch (error) {
             console.error('보강 후보 로드 실패:', error);
             alert('보강 후보를 불러올 수 없습니다.');
+            setCandidates([]);
         } finally {
             setLoading(false);
         }

@@ -15,11 +15,8 @@ class LoggerUtils:
     """로거 설정 관련 유틸리티 클래스 - 중복 제거"""
     
     @staticmethod
-    def setup_logger(name: str, 
-                    log_file: Optional[str] = None, 
-                    level: int = None,
-                    console: bool = True,
-                    file_logging: bool = None) -> logging.Logger:
+    def setup_logger(name: str, log_file: Optional[str] = None, level: int = None,
+                console: bool = True, file_logging: bool = None) -> logging.Logger:
         """
         통합 로거 설정 - 파일 로깅 기본 비활성화
         """
