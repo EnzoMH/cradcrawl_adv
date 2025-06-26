@@ -24,7 +24,7 @@ from .models import (
 class ChurchCRMDatabase:
     """SQLite 기반 CRM 데이터베이스 클래스"""
     
-    def __init__(self, db_path: str = "churches_crm.db"):
+    def __init__(self, db_path: str = "database/churches_crm.db"):
         self.db_path = db_path
         self.local = threading.local()
         self._init_database()

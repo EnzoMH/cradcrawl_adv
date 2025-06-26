@@ -314,7 +314,7 @@ import re
 from typing import Dict, List, Optional, Tuple, Any
 from dotenv import load_dotenv
 from .ai_helpers import AIModelManager
-from .settings import *
+from utils.settings import *
 
 class AIValidator:
     """AI를 활용한 고급 검증 시스템"""

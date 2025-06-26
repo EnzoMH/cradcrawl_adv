@@ -538,6 +538,10 @@ HOMEPAGE_KEYWORDS = [
     "메인", "대문", "official", "church", "교회"
 ]
 
+# 로그 설정 추가
+ENABLE_FILE_LOGGING = os.getenv("ENABLE_FILE_LOGGING", "false").lower() == "true"
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+
 # ===== 유틸리티 함수들 =====
 
 def get_area_name(area_code: str) -> str:

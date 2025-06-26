@@ -5,6 +5,11 @@
 FastAPI + SQLite를 활용한 크롤링 결과 관리
 """
 
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), 'utils'))
+sys.path.append(os.path.join(os.path.dirname(__file__), 'test'))
+
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles

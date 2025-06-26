@@ -12,6 +12,11 @@ advcrawler.py의 고급 크롤링 기능을 완전히 이식하여 통합
 ✅ 상세한 통계 및 모니터링
 """
 
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), 'utils'))
+sys.path.append(os.path.join(os.path.dirname(__file__), 'test'))
+
 import asyncio
 import json
 import time
@@ -31,13 +36,13 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # 프로젝트 설정 import
-from settings import *
+from utils.settings import *
 from utils.logger_utils import LoggerUtils
 from utils.file_utils import FileUtils
 from utils.phone_utils import PhoneUtils
-from ai_helpers import AIModelManager
-from parser import WebPageParser
-from validator import ContactValidator
+from utils.ai_helpers import AIModelManager
+from utils.parser import WebPageParser
+from utils.validator import ContactValidator
 
 class UnifiedCrawler:
     """통합 크롤링 엔진 - app.py 호환성 유지"""

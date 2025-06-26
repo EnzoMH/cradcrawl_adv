@@ -12,8 +12,8 @@ import logging
 import traceback
 from typing import Dict, Any, Optional, Union, List
 import google.generativeai as genai
-from .settings import AI_MODEL_CONFIG  # AI_MODEL_CONFIG만 import
-from .logger_utils import LoggerUtils
+from utils.settings import AI_MODEL_CONFIG  # AI_MODEL_CONFIG만 import
+from utils.logger_utils import LoggerUtils
 
 import ssl
 import urllib3

@@ -9,7 +9,7 @@ import logging
 import os
 from datetime import datetime
 from typing import Optional
-from .settings import LOGGER_NAMES, LOG_FORMAT
+from utils.settings import LOGGER_NAMES, LOG_FORMAT, ENABLE_FILE_LOGGING, LOG_LEVEL
 
 class LoggerUtils:
     """로거 설정 관련 유틸리티 클래스 - 중복 제거"""
@@ -17,13 +17,18 @@ class LoggerUtils:
     @staticmethod
     def setup_logger(name: str, 
                     log_file: Optional[str] = None, 
-                    level: int = logging.INFO,
+                    level: int = None,
                     console: bool = True,
-                    file_logging: bool = True) -> logging.Logger:
+                    file_logging: bool = None) -> logging.Logger:
         """
-        통합 로거 설정
-        fax_crawler.py + naver_map_crawler.py + url_extractor.py + validator.py + enhanced_detail_extractor.py 통합
+        통합 로거 설정 - 파일 로깅 기본 비활성화
         """
+        # 환경 변수에서 기본값 설정
+        if level is None:
+            level = getattr(logging, LOG_LEVEL, logging.INFO)
+        if file_logging is None:
+            file_logging = ENABLE_FILE_LOGGING
+        
         # 로거 이름 매핑 (constants.py 활용)
         logger_name = LOGGER_NAMES.get(name, name)
         logger = logging.getLogger(logger_name)
@@ -43,12 +48,8 @@ class LoggerUtils:
             console_handler.setFormatter(formatter)
             logger.addHandler(console_handler)
         
-        # 파일 핸들러 추가
-        if file_logging:
-            if not log_file:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                log_file = f"{logger_name}_{timestamp}.log"
-            
+        # 파일 핸들러 추가 (명시적으로 요청한 경우에만)
+        if file_logging and log_file:
             # 로그 디렉토리 생성
             log_dir = os.path.dirname(log_file) if os.path.dirname(log_file) else "logs"
             os.makedirs(log_dir, exist_ok=True)
@@ -60,67 +61,73 @@ class LoggerUtils:
             
             logger.info(f"로그 파일 설정: {log_file}")
         
-        logger.info(f"로거 '{logger_name}' 설정 완료")
+        logger.info(f"로거 '{logger_name}' 설정 완료 (파일 로깅: {'ON' if file_logging else 'OFF'})")
         return logger
     
     @staticmethod
-    def setup_crawler_logger(crawler_name: str) -> logging.Logger:
+    def setup_crawler_logger(crawler_name: str, enable_file_logging: bool = False) -> logging.Logger:
         """
-        크롤러 전용 로거 (통합)
-        fax_crawler.py + naver_map_crawler.py + url_extractor.py 통합
+        크롤러 전용 로거 (파일 로깅 선택적)
         """
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_file = f"logs/{crawler_name}_{timestamp}.log"
+        if enable_file_logging:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_file = f"logs/{crawler_name}_{timestamp}.log"
+        else:
+            log_file = None
         
         return LoggerUtils.setup_logger(
             name=crawler_name,
             log_file=log_file,
             level=logging.INFO,
             console=True,
-            file_logging=True
+            file_logging=enable_file_logging
         )
     
     @staticmethod
-    def setup_ai_logger() -> logging.Logger:
+    def setup_ai_logger(enable_file_logging: bool = False) -> logging.Logger:
         """
-        AI 응답 전용 로거 (enhanced_detail_extractor.py에서 가져옴)
+        AI 응답 전용 로거 (파일 로깅 선택적)
         """
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_file = f"logs/gemini_responses_{timestamp}.log"
+        if enable_file_logging:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_file = f"logs/gemini_responses_{timestamp}.log"
+        else:
+            log_file = None
         
         logger = LoggerUtils.setup_logger(
             name="ai_helpers", 
             log_file=log_file,
             level=logging.INFO,
             console=True,
-            file_logging=True
+            file_logging=enable_file_logging
         )
         
-        logger.info("AI 응답 로깅 시작")
+        if enable_file_logging:
+            logger.info("AI 응답 로깅 시작")
         return logger
     
     @staticmethod
     def setup_validator_logger() -> logging.Logger:
         """
-        검증기 전용 로거 (validator.py에서 가져옴)
+        검증기 전용 로거 (콘솔만)
         """
         return LoggerUtils.setup_logger(
             name="validator",
             level=logging.INFO,
             console=True,
-            file_logging=False  # 검증기는 콘솔만
+            file_logging=False
         )
     
     @staticmethod
     def setup_app_logger() -> logging.Logger:
         """
-        웹앱 전용 로거 (app.py에서 가져옴)
+        웹앱 전용 로거 (콘솔만)
         """
         return LoggerUtils.setup_logger(
             name="app",
             level=logging.INFO,
             console=True,
-            file_logging=False  # 웹앱은 콘솔만
+            file_logging=False
         )
     
     @staticmethod

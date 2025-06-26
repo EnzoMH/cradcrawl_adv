@@ -13,7 +13,7 @@ import requests
 import urllib3
 
 # settings.py에서 상수들 임포트 (수정)
-from .settings import (
+from utils.settings import (
     PHONE_EXTRACTION_PATTERNS,
     FAX_EXTRACTION_PATTERNS,
     EMAIL_EXTRACTION_PATTERNS,
