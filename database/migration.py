@@ -41,7 +41,7 @@ try:
     
     # 1. settings.py에서 먼저 시도
     try:
-        from settings import GEMINI_API_KEY
+        from utils.settings import GEMINI_API_KEY
         ai_logger.info("🔑 settings.py에서 API 키 로드")
     except ImportError:
         # 2. .env 파일에서 직접 읽기

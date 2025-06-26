@@ -35,7 +35,7 @@ sys.path.insert(0, str(project_root))
 
 # settings.py에서 필요한 것들 import
 try:
-    from settings import (
+    from utils.settings import (
         PHONE_EXTRACTION_PATTERNS,
         FAX_EXTRACTION_PATTERNS,
         EMAIL_EXTRACTION_PATTERNS,

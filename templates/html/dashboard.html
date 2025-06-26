@@ -6,18 +6,85 @@
     <title>대시보드 - CRM 시스템</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="/templates/css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- React CDN -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <!-- Babel for JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#eff6ff', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
 </head>
 <body class="bg-gray-50">
+    <!-- 공통 네비게이션 포함 -->
+    <nav class="bg-white shadow-sm border-b">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <!-- 브랜드/홈 링크 -->
+                <div class="flex items-center">
+                    <a href="/" class="flex items-center text-xl font-semibold text-gray-900 hover:text-blue-600">
+                        <i class="fas fa-building mr-2 text-blue-500"></i>
+                        <span class="hidden sm:block">CRM 시스템</span>
+                    </a>
+                    <span class="ml-4 px-2 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">대시보드</span>
+                </div>
+                
+                <!-- 메인 네비게이션 -->
+                <div class="flex items-center space-x-1">
+                    <a href="/dashboard" 
+                       class="nav-item active px-3 py-2 rounded-md text-sm font-medium bg-blue-50 text-blue-600"
+                       data-page="dashboard">
+                        <i class="fas fa-chart-bar mr-1"></i>
+                        <span class="hidden sm:inline">대시보드</span>
+                    </a>
+                    <a href="/organizations" 
+                       class="nav-item px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                       data-page="organizations">
+                        <i class="fas fa-building mr-1"></i>
+                        <span class="hidden sm:inline">기관 관리</span>
+                    </a>
+                    <a href="/enrichment" 
+                       class="nav-item px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                       data-page="enrichment">
+                        <i class="fas fa-magic mr-1"></i>
+                        <span class="hidden sm:inline">연락처 보강</span>
+                    </a>
+                </div>
+                
+                <!-- 사용자 메뉴 -->
+                <div class="flex items-center space-x-2">
+                    <button class="text-gray-600 hover:text-gray-900 p-2 rounded-md">
+                        <i class="fas fa-bell"></i>
+                    </button>
+                    <div class="relative">
+                        <button class="flex items-center text-gray-600 hover:text-gray-900 p-2 rounded-md">
+                            <i class="fas fa-user-circle mr-1"></i>
+                            <span class="hidden sm:inline">관리자</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
     <!-- React 앱이 마운트될 루트 -->
     <div id="dashboard-root"></div>
     
-    <!-- JavaScript 모듈들 -->
+    <!-- JavaScript 모듈들 - 의존성 순서대로 로드 -->
+    <script src="/templates/js/utils.js"></script>
+    <script src="/templates/js/api.js"></script>
     <script type="text/babel" src="/templates/js/dashboard.js"></script>
 </body>
 </html> 

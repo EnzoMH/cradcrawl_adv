@@ -8,6 +8,14 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body class="bg-gray-50 min-h-screen flex items-center justify-center">
+    <!-- 홈 링크 -->
+    <div class="absolute top-4 left-4">
+        <a href="/" class="flex items-center text-gray-600 hover:text-blue-600 transition-colors">
+            <i class="fas fa-arrow-left mr-2"></i>
+            <span>홈으로 돌아가기</span>
+        </a>
+    </div>
+
     <div class="max-w-md w-full space-y-8">
         <div>
             <div class="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-blue-100">
@@ -22,6 +30,16 @@
         </div>
         
         <form class="mt-8 space-y-6" action="/login" method="POST">
+            <!-- 에러 메시지 표시 -->
+            {% if error %}
+            <div class="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md">
+                <div class="flex items-center">
+                    <i class="fas fa-exclamation-circle mr-2"></i>
+                    <span>{{ error }}</span>
+                </div>
+            </div>
+            {% endif %}
+            
             <div class="rounded-md shadow-sm -space-y-px">
                 <div>
                     <label for="username" class="sr-only">사용자명</label>

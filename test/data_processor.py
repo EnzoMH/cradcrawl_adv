@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Any, Union
 from pathlib import Path
 
 # 프로젝트 설정 import
-from settings import *
+from utils.settings import *
 from utils.logger_utils import LoggerUtils
 from utils.file_utils import FileUtils
 

@@ -1,217 +1,22 @@
-// API 클래스
-class DashboardAPI {
-    static async getDashboardData() {
-        const response = await fetch('/api/stats/dashboard-data');
-        if (!response.ok) throw new Error('데이터 로드 실패');
-        return response.json();
-    }
-    
-    static async getEnrichmentCandidates() {
-        const response = await fetch('/api/organizations/enrichment-candidates');
-        if (!response.ok) throw new Error('보강 후보 로드 실패');
-        return response.json();
-    }
-    
-    static async enrichSingle(organizationId) {
-        const response = await fetch(`/api/enrichment/single/${organizationId}`, {
-            method: 'POST'
-        });
-        if (!response.ok) throw new Error('보강 실패');
-        return response.json();
-    }
-}
+// 대시보드 React 애플리케이션
+const { useState, useEffect } = React;
 
-// 통계 카드 컴포넌트
-const StatsCard = ({ icon, title, value, color }) => (
-    <div className="bg-white overflow-hidden shadow rounded-lg">
-        <div className="p-5">
-            <div className="flex items-center">
-                <div className="flex-shrink-0">
-                    <i className={`fas ${icon} text-2xl ${color}`}></i>
-                </div>
-                <div className="ml-5 w-0 flex-1">
-                    <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">{title}</dt>
-                        <dd className="text-lg font-medium text-gray-900">{value}</dd>
-                    </dl>
-                </div>
-            </div>
-        </div>
-    </div>
-);
-
-// 차트 컴포넌트
-const ChartContainer = ({ title, children }) => (
-    <div className="bg-white overflow-hidden shadow rounded-lg">
-        <div className="px-4 py-5 sm:p-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">{title}</h3>
-            {children}
-        </div>
-    </div>
-);
-
-// 도넛 차트 컴포넌트
-const CompletionChart = ({ completeContacts, missingContacts }) => {
-    const chartRef = React.useRef(null);
-    
-    React.useEffect(() => {
-        if (chartRef.current) {
-            const ctx = chartRef.current.getContext('2d');
-            new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['완료', '누락'],
-                    datasets: [{
-                        data: [completeContacts, missingContacts],
-                        backgroundColor: ['#10B981', '#F59E0B'],
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: {
-                            position: 'bottom'
-                        }
-                    }
-                }
-            });
-        }
-    }, [completeContacts, missingContacts]);
-    
-    return <canvas ref={chartRef} width="400" height="200"></canvas>;
-};
-
-// 막대 차트 컴포넌트
-const CategoryChart = ({ categories, categoryCounts }) => {
-    const chartRef = React.useRef(null);
-    
-    React.useEffect(() => {
-        if (chartRef.current && categories.length > 0) {
-            const ctx = chartRef.current.getContext('2d');
-            new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: categories,
-                    datasets: [{
-                        label: '기관 수',
-                        data: categoryCounts,
-                        backgroundColor: '#3B82F6',
-                        borderRadius: 4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    }
-                }
-            });
-        }
-    }, [categories, categoryCounts]);
-    
-    return <canvas ref={chartRef} width="400" height="200"></canvas>;
-};
-
-// 보강 후보 테이블 컴포넌트
-const EnrichmentTable = ({ candidates, onEnrich }) => {
-    const getMissingFields = (candidate) => {
-        const missing = [];
-        if (!candidate.phone) missing.push('전화번호');
-        if (!candidate.fax) missing.push('팩스');
-        if (!candidate.email) missing.push('이메일');
-        if (!candidate.homepage) missing.push('홈페이지');
-        if (!candidate.address) missing.push('주소');
-        return missing;
-    };
-    
-    const getPriorityBadge = (missingCount) => {
-        if (missingCount >= 4) {
-            return <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">높음</span>;
-        } else if (missingCount >= 2) {
-            return <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">보통</span>;
-        } else {
-            return <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">낮음</span>;
-        }
-    };
-    
-    return (
-        <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                    <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">기관명</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">카테고리</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">누락 항목</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">우선순위</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">작업</th>
-                    </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                    {candidates.length > 0 ? candidates.map(candidate => {
-                        const missingFields = getMissingFields(candidate);
-                        return (
-                            <tr key={candidate.id}>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                    {candidate.name}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {candidate.category || '미분류'}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {missingFields.join(', ') || '없음'}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    {getPriorityBadge(missingFields.length)}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    <button 
-                                        onClick={() => onEnrich(candidate.id)}
-                                        className="text-blue-600 hover:text-blue-900 mr-2"
-                                    >
-                                        <i className="fas fa-search"></i>
-                                    </button>
-                                    <a href={`/api/organizations/${candidate.id}`} 
-                                       className="text-gray-600 hover:text-gray-900">
-                                        <i className="fas fa-eye"></i>
-                                    </a>
-                                </td>
-                            </tr>
-                        );
-                    }) : (
-                        <tr>
-                            <td colSpan="5" className="px-6 py-4 text-center text-gray-500">
-                                보강이 필요한 기관이 없습니다.
-                            </td>
-                        </tr>
-                    )}
-                </tbody>
-            </table>
-        </div>
-    );
-};
+// API는 api.js에서 전역으로 로드됨
 
 // 메인 대시보드 컴포넌트
-const Dashboard = () => {
-    const [dashboardData, setDashboardData] = React.useState(null);
-    const [candidates, setCandidates] = React.useState([]);
-    const [loading, setLoading] = React.useState(true);
-    const [error, setError] = React.useState(null);
-    
-    // 데이터 로드
+function Dashboard() {
+    const [dashboardData, setDashboardData] = useState(null);
+    const [candidates, setCandidates] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    // 대시보드 데이터 로드
     const loadData = async () => {
         try {
             setLoading(true);
             const [data, candidatesData] = await Promise.all([
-                DashboardAPI.getDashboardData(),
-                DashboardAPI.getEnrichmentCandidates()
+                API.getDashboardData(),
+                API.getEnrichmentCandidates()
             ]);
             setDashboardData(data);
             setCandidates(candidatesData);
@@ -221,27 +26,22 @@ const Dashboard = () => {
             setLoading(false);
         }
     };
-    
-    // 단일 보강 처리
-    const handleEnrich = async (organizationId) => {
+
+    useEffect(() => {
+        loadData();
+    }, []);
+
+    // 단일 보강 실행
+    const handleQuickEnrich = async (organizationId) => {
         try {
-            const result = await DashboardAPI.enrichSingle(organizationId);
+            const result = await API.enrichSingle(organizationId);
             alert(`보강 완료: ${result.enriched_fields.join(', ')}`);
             loadData(); // 데이터 새로고침
         } catch (err) {
             alert(`보강 실패: ${err.message}`);
         }
     };
-    
-    // 컴포넌트 마운트 시 데이터 로드
-    React.useEffect(() => {
-        loadData();
-        
-        // 30초마다 자동 새로고침
-        const interval = setInterval(loadData, 30000);
-        return () => clearInterval(interval);
-    }, []);
-    
+
     if (loading) {
         return (
             <div className="h-screen flex items-center justify-center">
@@ -252,14 +52,14 @@ const Dashboard = () => {
             </div>
         );
     }
-    
+
     if (error) {
         return (
             <div className="h-screen flex items-center justify-center">
                 <div className="text-center">
-                    <i className="fas fa-exclamation-triangle text-6xl text-red-400 mb-4"></i>
-                    <h1 className="text-2xl font-bold text-gray-800 mb-2">오류 발생</h1>
-                    <p className="text-gray-500 mb-4">{error}</p>
+                    <i className="fas fa-exclamation-triangle text-6xl text-red-500 mb-4"></i>
+                    <h1 className="text-2xl font-bold text-red-800 mb-2">데이터 로드 실패</h1>
+                    <p className="text-red-600 mb-4">{error}</p>
                     <button 
                         onClick={loadData}
                         className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
@@ -270,97 +70,277 @@ const Dashboard = () => {
             </div>
         );
     }
-    
+
     return (
-        <div className="min-h-screen bg-gray-50">
-            {/* 네비게이션 */}
-            <nav className="bg-white shadow-sm border-b">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-between h-16">
-                        <div className="flex items-center">
-                            <h1 className="text-xl font-semibold text-gray-900">
-                                <i className="fas fa-chart-dashboard mr-2 text-blue-500"></i>
-                                CRM 대시보드
-                            </h1>
-                        </div>
-                        <div className="flex items-center space-x-4">
-                            <a href="/" className="text-gray-600 hover:text-gray-900">
-                                <i className="fas fa-home mr-1"></i>홈
-                            </a>
-                            <a href="/docs" className="text-gray-600 hover:text-gray-900">
-                                <i className="fas fa-book mr-1"></i>API 문서
-                            </a>
-                        </div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            {/* 헤더 */}
+            <div className="mb-8">
+                <h1 className="text-2xl font-bold text-gray-900">CRM 대시보드</h1>
+                <p className="text-gray-600 mt-1">교회/기관 관리 시스템 현황</p>
+            </div>
+
+            {/* 통계 카드 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <StatCard
+                    title="총 기관 수"
+                    value={dashboardData?.total_organizations || 0}
+                    icon="fas fa-building"
+                    color="blue"
+                />
+                <StatCard
+                    title="연락처 완료"
+                    value={dashboardData?.complete_contacts || 0}
+                    icon="fas fa-check-circle"
+                    color="green"
+                />
+                <StatCard
+                    title="연락처 누락"
+                    value={dashboardData?.missing_contacts || 0}
+                    icon="fas fa-exclamation-circle"
+                    color="red"
+                />
+                <StatCard
+                    title="완성도"
+                    value={`${(dashboardData?.completion_rate || 0).toFixed(1)}%`}
+                    icon="fas fa-chart-pie"
+                    color="purple"
+                />
+            </div>
+
+            {/* 차트 섹션 */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                {/* 카테고리별 분포 */}
+                <div className="bg-white rounded-lg shadow p-6">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">
+                        <i className="fas fa-chart-bar mr-2 text-blue-600"></i>
+                        카테고리별 분포
+                    </h3>
+                    <CategoryChart data={dashboardData} />
+                </div>
+
+                {/* 연락처 완성도 */}
+                <div className="bg-white rounded-lg shadow p-6">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">
+                        <i className="fas fa-chart-pie mr-2 text-green-600"></i>
+                        연락처 완성도
+                    </h3>
+                    <CompletionChart data={dashboardData} />
+                </div>
+            </div>
+
+            {/* 보강 후보 기관 */}
+            <div className="bg-white rounded-lg shadow">
+                <div className="px-6 py-4 border-b border-gray-200">
+                    <div className="flex justify-between items-center">
+                        <h3 className="text-lg font-medium text-gray-900">
+                            <i className="fas fa-magic mr-2 text-purple-600"></i>
+                            연락처 보강 후보
+                        </h3>
+                        <a 
+                            href="/enrichment" 
+                            className="text-purple-600 hover:text-purple-800 text-sm font-medium"
+                        >
+                            전체 보기 <i className="fas fa-arrow-right ml-1"></i>
+                        </a>
                     </div>
                 </div>
-            </nav>
-            
-            {/* 메인 컨텐츠 */}
-            <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-                {/* 통계 카드 */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                    <StatsCard 
-                        icon="fa-building"
-                        title="총 기관 수"
-                        value={dashboardData?.total_organizations || 0}
-                        color="text-blue-500"
-                    />
-                    <StatsCard 
-                        icon="fa-phone"
-                        title="연락처 완료"
-                        value={dashboardData?.complete_contacts || 0}
-                        color="text-green-500"
-                    />
-                    <StatsCard 
-                        icon="fa-exclamation-triangle"
-                        title="연락처 누락"
-                        value={dashboardData?.missing_contacts || 0}
-                        color="text-yellow-500"
-                    />
-                    <StatsCard 
-                        icon="fa-percentage"
-                        title="완성도"
-                        value={`${(dashboardData?.completion_rate || 0).toFixed(1)}%`}
-                        color="text-purple-500"
-                    />
-                </div>
                 
-                {/* 차트 영역 */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-                    <ChartContainer title="연락처 완성도">
-                        <CompletionChart 
-                            completeContacts={dashboardData?.complete_contacts || 0}
-                            missingContacts={dashboardData?.missing_contacts || 0}
-                        />
-                    </ChartContainer>
-                    
-                    <ChartContainer title="카테고리별 분포">
-                        <CategoryChart 
-                            categories={dashboardData?.categories || []}
-                            categoryCounts={dashboardData?.category_counts || []}
-                        />
-                    </ChartContainer>
-                </div>
-                
-                {/* 보강 후보 테이블 */}
-                <div className="bg-white overflow-hidden shadow rounded-lg">
-                    <div className="px-4 py-5 sm:p-6">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg leading-6 font-medium text-gray-900">연락처 보강 후보</h3>
-                            <a href="/enrichment" className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm">
-                                <i className="fas fa-plus mr-1"></i>보강 시작
-                            </a>
-                        </div>
-                        <EnrichmentTable 
-                            candidates={candidates}
-                            onEnrich={handleEnrich}
-                        />
+                {candidates.length === 0 ? (
+                    <div className="p-8 text-center">
+                        <i className="fas fa-check-circle text-4xl text-green-500 mb-4"></i>
+                        <p className="text-gray-600">보강이 필요한 기관이 없습니다!</p>
+                        <p className="text-sm text-gray-500 mt-2">모든 기관의 연락처 정보가 완성되었습니다.</p>
                     </div>
+                ) : (
+                    <div className="divide-y divide-gray-200">
+                        {candidates.slice(0, 5).map((candidate) => (
+                            <CandidateRow
+                                key={candidate.id}
+                                candidate={candidate}
+                                onEnrich={handleQuickEnrich}
+                            />
+                        ))}
+                        {candidates.length > 5 && (
+                            <div className="p-4 text-center bg-gray-50">
+                                <a 
+                                    href="/enrichment" 
+                                    className="text-purple-600 hover:text-purple-800 font-medium"
+                                >
+                                    +{candidates.length - 5}개 더 보기
+                                </a>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// 통계 카드 컴포넌트
+function StatCard({ title, value, icon, color }) {
+    const colorClasses = {
+        blue: 'bg-blue-100 text-blue-600',
+        green: 'bg-green-100 text-green-600',
+        red: 'bg-red-100 text-red-600',
+        purple: 'bg-purple-100 text-purple-600',
+        yellow: 'bg-yellow-100 text-yellow-600'
+    };
+
+    return (
+        <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+                <div className={`p-3 rounded-full ${colorClasses[color]}`}>
+                    <i className={`${icon} text-xl`}></i>
+                </div>
+                <div className="ml-4">
+                    <h3 className="text-2xl font-bold text-gray-900">
+                        {typeof value === 'number' ? value.toLocaleString() : value}
+                    </h3>
+                    <p className="text-gray-600">{title}</p>
                 </div>
             </div>
         </div>
     );
-};
+}
+
+// 카테고리 차트 컴포넌트 (간단한 바 차트)
+function CategoryChart({ data }) {
+    if (!data?.categories || !data?.category_counts) {
+        return <div className="text-gray-500 text-center py-8">데이터가 없습니다.</div>;
+    }
+
+    const maxCount = Math.max(...data.category_counts);
+
+    return (
+        <div className="space-y-4">
+            {data.categories.map((category, index) => (
+                <div key={category} className="flex items-center">
+                    <div className="w-20 text-sm text-gray-600 truncate">{category}</div>
+                    <div className="flex-1 mx-4">
+                        <div className="bg-gray-200 rounded-full h-4">
+                            <div 
+                                className="bg-blue-500 h-4 rounded-full transition-all duration-300"
+                                style={{ width: `${(data.category_counts[index] / maxCount) * 100}%` }}
+                            ></div>
+                        </div>
+                    </div>
+                    <div className="w-12 text-sm text-gray-900 font-medium text-right">
+                        {data.category_counts[index]}
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+// 완성도 차트 컴포넌트 (도넛 차트 스타일)
+function CompletionChart({ data }) {
+    const complete = data?.complete_contacts || 0;
+    const missing = data?.missing_contacts || 0;
+    const total = complete + missing;
+    
+    if (total === 0) {
+        return <div className="text-gray-500 text-center py-8">데이터가 없습니다.</div>;
+    }
+
+    const completionRate = (complete / total) * 100;
+
+    return (
+        <div className="flex items-center justify-center">
+            <div className="relative w-32 h-32">
+                {/* 원형 프로그레스 바 */}
+                <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 36 36">
+                    <path
+                        className="text-gray-200"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                        fill="transparent"
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    />
+                    <path
+                        className="text-green-500"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                        fill="transparent"
+                        strokeDasharray={`${completionRate}, 100`}
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-xl font-bold text-gray-900">
+                        {completionRate.toFixed(1)}%
+                    </span>
+                </div>
+            </div>
+            <div className="ml-6 space-y-2">
+                <div className="flex items-center">
+                    <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                    <span className="text-sm text-gray-600">완료: {complete.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center">
+                    <div className="w-3 h-3 bg-gray-300 rounded-full mr-2"></div>
+                    <span className="text-sm text-gray-600">누락: {missing.toLocaleString()}</span>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// 보강 후보 행 컴포넌트
+function CandidateRow({ candidate, onEnrich }) {
+    const getMissingFields = () => {
+        const missing = [];
+        if (!candidate.phone) missing.push('전화번호');
+        if (!candidate.fax) missing.push('팩스');
+        if (!candidate.email) missing.push('이메일');
+        if (!candidate.homepage) missing.push('홈페이지');
+        if (!candidate.address) missing.push('주소');
+        return missing;
+    };
+
+    const missingFields = getMissingFields();
+
+    return (
+        <div className="p-4 hover:bg-gray-50 transition-colors">
+            <div className="flex items-center justify-between">
+                <div className="flex-1">
+                    <div className="flex items-center space-x-3">
+                        <h4 className="text-sm font-medium text-gray-900">{candidate.name}</h4>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                            {candidate.category || '미분류'}
+                        </span>
+                    </div>
+                    <div className="mt-1 text-sm text-gray-500">{candidate.address || '주소 없음'}</div>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                        {missingFields.map((field) => (
+                            <span key={field} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                                {field}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                    <button
+                        onClick={() => onEnrich(candidate.id)}
+                        className="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded text-sm transition-colors"
+                    >
+                        <i className="fas fa-magic mr-1"></i>
+                        보강
+                    </button>
+                    <a 
+                        href={`/organizations/${candidate.id}`} 
+                        target="_blank"
+                        className="text-gray-600 hover:text-gray-900 p-1 rounded transition-colors"
+                        title="상세보기"
+                    >
+                        <i className="fas fa-external-link-alt"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 // React 앱 렌더링
 ReactDOM.render(<Dashboard />, document.getElementById('dashboard-root'));

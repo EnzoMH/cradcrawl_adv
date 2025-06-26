@@ -73,13 +73,7 @@ class CRMSystem {
     async loadDashboardStats() {
         try {
             console.log('🔄 대시보드 통계 로드 시작');
-            const response = await fetch('/api/statistics');
-            
-            if (!response.ok) {
-                throw new Error(`API 오류: ${response.status}`);
-            }
-            
-            const data = await response.json();
+            const data = await API.getDashboardStats();
             console.log('🔄 API 데이터:', data);
             
             if (data.status === 'success') {
@@ -113,19 +107,18 @@ class CRMSystem {
                 this.hasMore = true;
             }
             
-            const params = new URLSearchParams({
+            const params = {
                 page: this.filters.page,
                 per_page: this.filters.perPage
-            });
+            };
             
-            if (this.filters.search) params.append('search', this.filters.search);
-            if (this.filters.category) params.append('category', this.filters.category);
-            if (this.filters.status) params.append('status', this.filters.status);
+            if (this.filters.search) params.search = this.filters.search;
+            if (this.filters.category) params.category = this.filters.category;
+            if (this.filters.status) params.status = this.filters.status;
             
-            const response = await fetch(`/api/organizations?${params}`);
-            const data = await response.json();
+            const data = await API.getOrganizations(params);
             
-            if (response.ok) {
+            if (data) {
                 if (resetPage) {
                     this.organizations = data.organizations || [];
                 } else {
@@ -455,63 +448,81 @@ class CRMSystem {
     }
 }
 
-// ===== 전역 유틸리티 함수들 =====
-
-const Utils = {
-    // 날짜 포맷팅
-    formatDate(date) {
-        if (!date) return '-';
-        return new Date(date).toLocaleString('ko-KR');
-    },
-
-    // 숫자 포맷팅
-    formatNumber(num) {
-        if (!num) return '0';
-        return num.toLocaleString('ko-KR');
-    },
-
-    // 상태 클래스 반환
-    getStatusClass(status) {
-        const classes = {
-            '신규': 'bg-gray-100 text-gray-800',
-            '접촉완료': 'bg-blue-100 text-blue-800', 
-            '관심있음': 'bg-yellow-100 text-yellow-800',
-            '협상중': 'bg-orange-100 text-orange-800',
-            '성사': 'bg-green-100 text-green-800',
-            '실패': 'bg-red-100 text-red-800'
-        };
-        return classes[status] || 'bg-gray-100 text-gray-800';
-    },
-
-    // 디바운스
-    debounce(func, wait) {
-        let timeout;
-        return function executedFunction(...args) {
-            const later = () => {
-                clearTimeout(timeout);
-                func(...args);
-            };
-            clearTimeout(timeout);
-            timeout = setTimeout(later, wait);
-        };
-    },
-
-    // 페이지네이션 계산
-    calculatePagination(current, total, visiblePages = 5) {
-        const half = Math.floor(visiblePages / 2);
-        let start = Math.max(current - half, 1);
-        let end = Math.min(start + visiblePages - 1, total);
-        
-        if (end - start + 1 < visiblePages) {
-            start = Math.max(end - visiblePages + 1, 1);
-        }
-        
-        return { start, end };
-    }
-};
+// Utils는 utils.js에서 전역으로 로드됨
 
 // ===== 전역 인스턴스 생성 =====
 let crmSystem;
+
+// ===== 전역 함수들 (HTML onclick에서 호출) =====
+function showOrganizationDetail(id) {
+    if (crmSystem && UI.showOrganizationDetail) {
+        UI.showOrganizationDetail(id);
+    } else {
+        console.error('CRM 시스템이 초기화되지 않았습니다.');
+    }
+}
+
+function showAddOrganizationModal() {
+    if (crmSystem && UI.showAddOrganizationModal) {
+        UI.showAddOrganizationModal();
+    } else {
+        console.error('CRM 시스템이 초기화되지 않았습니다.');
+    }
+}
+
+function editOrganization(id) {
+    if (crmSystem && UI.editOrganization) {
+        UI.editOrganization(id);
+    } else {
+        console.error('CRM 시스템이 초기화되지 않았습니다.');
+    }
+}
+
+function deleteOrganization(id) {
+    if (crmSystem && UI.deleteOrganization) {
+        UI.deleteOrganization(id);
+    } else {
+        console.error('CRM 시스템이 초기화되지 않았습니다.');
+    }
+}
+
+function addActivity(id) {
+    if (crmSystem) {
+        // 활동 추가 기능 구현
+        console.log('활동 추가:', id);
+        UI.showSuccess(`기관 ${id}에 활동을 추가합니다.`);
+    } else {
+        console.error('CRM 시스템이 초기화되지 않았습니다.');
+    }
+}
+
+function exportOrganizations() {
+    if (crmSystem) {
+        // 내보내기 기능 구현
+        console.log('기관 목록 내보내기');
+        UI.showSuccess('기관 목록을 내보냅니다.');
+    } else {
+        console.error('CRM 시스템이 초기화되지 않았습니다.');
+    }
+}
+
+function searchOrganizations() {
+    if (crmSystem) {
+        // 검색 실행
+        const searchInput = document.getElementById('search-input');
+        const categoryFilter = document.getElementById('category-filter');
+        const statusFilter = document.getElementById('status-filter');
+        
+        crmSystem.updateFilters({
+            search: searchInput?.value || '',
+            category: categoryFilter?.value || '',
+            status: statusFilter?.value || '',
+            page: 1
+        });
+    } else {
+        console.error('CRM 시스템이 초기화되지 않았습니다.');
+    }
+}
 
 // ===== 초기화 =====
 document.addEventListener('DOMContentLoaded', async () => {

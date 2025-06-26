@@ -197,11 +197,11 @@ const UI = {
                             <p class="text-gray-600">등록된 기관들을 관리하고 영업 활동을 추적하세요</p>
                         </div>
                         <div class="flex space-x-3">
-                            <button onclick="this.exportOrganizations()" 
+                            <button onclick="exportOrganizations()" 
                                     class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition-colors">
                                 <i class="fas fa-download mr-2"></i>내보내기
                             </button>
-                            <button onclick="this.showAddOrganizationModal()" 
+                            <button onclick="showAddOrganizationModal()" 
                                     class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
                                 <i class="fas fa-plus mr-2"></i>새 기관 등록
                             </button>
@@ -319,7 +319,7 @@ const UI = {
                     </div>
                 </div>
                 <div class="mt-4 flex justify-between items-center">
-                    <button onclick="this.searchOrganizations()" 
+                    <button onclick="searchOrganizations()" 
                             class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg transition-colors">
                         <i class="fas fa-search mr-2"></i>검색
                     </button>
@@ -482,7 +482,7 @@ const UI = {
                     <i class="fas fa-building text-4xl text-gray-300 mb-4"></i>
                     <h3 class="text-lg font-medium text-gray-900 mb-2">등록된 기관이 없습니다</h3>
                     <p class="text-gray-500 mb-4">새로운 기관을 등록하거나 크롤링을 실행해보세요</p>
-                    <button onclick="this.showAddOrganizationModal()" 
+                    <button onclick="showAddOrganizationModal()" 
                             class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
                         <i class="fas fa-plus mr-2"></i>기관 등록
                     </button>
@@ -526,7 +526,7 @@ const UI = {
     renderOrganizationRow(org, index) {
         return `
             <tr class="hover:bg-gray-50 transition-colors cursor-pointer" 
-                onclick="this.showOrganizationDetail(${org.id})">
+                onclick="showOrganizationDetail(${org.id})">
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     ${index + 1}
                 </td>
@@ -569,17 +569,17 @@ const UI = {
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div class="flex space-x-2">
-                        <button onclick="event.stopPropagation(); this.editOrganization(${org.id})" 
+                        <button onclick="event.stopPropagation(); editOrganization(${org.id})" 
                                 class="text-blue-600 hover:text-blue-900 transition-colors"
                                 title="편집">
                             <i class="fas fa-edit"></i>
                         </button>
-                        <button onclick="event.stopPropagation(); this.addActivity(${org.id})" 
+                        <button onclick="event.stopPropagation(); addActivity(${org.id})" 
                                 class="text-green-600 hover:text-green-900 transition-colors"
                                 title="활동 추가">
                             <i class="fas fa-plus-circle"></i>
                         </button>
-                        <button onclick="event.stopPropagation(); this.deleteOrganization(${org.id})" 
+                        <button onclick="event.stopPropagation(); deleteOrganization(${org.id})" 
                                 class="text-red-600 hover:text-red-900 transition-colors"
                                 title="삭제">
                             <i class="fas fa-trash"></i>

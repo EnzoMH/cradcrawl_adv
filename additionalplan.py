@@ -22,12 +22,12 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 # 프로젝트 설정 import
-from settings import *
+from utils.settings import *
 from utils.logger_utils import LoggerUtils
 from utils.file_utils import FileUtils
 from utils.phone_utils import PhoneUtils
 from utils.crawler_utils import CrawlerUtils
-from ai_helpers import AIModelManager
+from utils.ai_helpers import AIModelManager
 
 class CrawlingStage(Enum):
     """크롤링 단계 정의"""

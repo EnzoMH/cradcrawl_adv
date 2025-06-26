@@ -22,7 +22,7 @@ import requests
 from bs4 import BeautifulSoup
 
 # settings.py에서 상수들 임포트 (수정)
-from settings import (
+from utils.settings import (
     PHONE_EXTRACTION_PATTERNS,
     FAX_EXTRACTION_PATTERNS, 
     KOREAN_AREA_CODES,
