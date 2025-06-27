@@ -66,7 +66,7 @@ except ImportError as e:
     VALIDATOR_AVAILABLE = False
 
 try:
-    from database.database import get_database
+    from database.database import get_database, ChurchCRMDatabase
     DATABASE_AVAILABLE = True
     print("✅ database.py 모듈 로드 성공")
 except ImportError as e:
@@ -750,8 +750,8 @@ class EnhancedContactExtractionAgent(AIAgent):
                         if self._validate_phone_by_region(fax, address):
                             self.logger.info(f"✅ 팩스번호 발견: {fax}")
                             return fax
-                        else:
-                            self.logger.warning(f"⚠️ 팩스 지역번호 불일치: {fax}")
+                    else:
+                        self.logger.warning(f"⚠️ 팩스 지역번호 불일치: {fax}")
                 
                 self.logger.info("📠 중복되지 않는 팩스번호 없음")
             
@@ -893,7 +893,7 @@ class AIVerificationAgent(AIAgent):
                 response = self.ai_manager.gemini_model.generate_content(verification_prompt)
                 response_text = response.text.strip()
                 
-                # 응답 파싱
+                                # 응답 파싱
                 return self._parse_verification_response(response_text)
             else:
                 return {
@@ -901,7 +901,7 @@ class AIVerificationAgent(AIAgent):
                     'confidence_score': 0.5,
                     'verification_method': 'no_ai_available'
                 }
-                
+            
         except Exception as e:
             self.logger.warning(f"AI 검증 실패: {e}")
             return {
@@ -985,7 +985,7 @@ class AIVerificationAgent(AIAgent):
             self.logger.warning(f"신뢰도 점수 조정 실패: {e}")
 
 class ContactPageSearchAgent(AIAgent):
-    """연락처 페이지 전용 검색 AI 에이전트 (additionalplan.py에서 가져온 혁신적 기능!)"""
+    """연락처 페이지 전용 검색 AI 에이전트 """
     
     def __init__(self, ai_manager: AIModelManager, logger: logging.Logger, parent_crawler):
         super().__init__("ContactPageSearchAgent", ai_manager, logger, parent_crawler)
@@ -1794,30 +1794,29 @@ class AIEnhancedModularUnifiedCrawler:
             return {
                 "phone": context.extracted_data.get("phone", ""),
                 "fax": context.extracted_data.get("fax", ""),
-                "email": context.extracted_data.get("email", ""),
+                                "email": context.extracted_data.get("email", ""),
                 "address": context.extracted_data.get("address", ""),
-                "ai_insights": context.ai_insights,
+                "organization_size": context.extracted_data.get("organization_size", ""),
+                "denomination": context.extracted_data.get("denomination", ""),
                 "confidence_scores": context.confidence_scores,
-                "status": "success",
-                "ai_enhanced": True
+                "ai_enhanced": True,
+                "status": "success"
             }
-                
+            
         except Exception as e:
             self.logger.error(f"AI 홈페이지 분석 오류: {homepage_url} - {e}")
             return {"status": "error", "error": str(e)}
-    
-    async def search_missing_info(self, org_name: str, missing_fields: List[str]) -> Dict[str, str]:
-        """누락된 정보 검색 - ContactEnrichmentService 호환성 (AI 강화)"""
+
+    async def search_phone_number(self, org_name: str, address: str = "") -> Dict[str, Any]:
+        """전화번호 검색 - ContactEnrichmentService 호환성 (AI 강화)"""
         try:
-            self.logger.info(f"🔍 AI 누락 정보 검색: {org_name} - {missing_fields}")
-            
-            results = {}
+            self.logger.info(f"📞 AI 전화번호 검색: {org_name}")
             
             # AI 에이전트를 통한 연락처 추출
             context = CrawlingContext(
-                organization={'name': org_name},
+                organization={'name': org_name, 'address': address},
                 current_stage=CrawlingStage.CONTACT_EXTRACTION,
-                extracted_data={},
+                extracted_data={'address': address},
                 ai_insights={},
                 error_log=[],
                 processing_time=0,
@@ -1828,345 +1827,149 @@ class AIEnhancedModularUnifiedCrawler:
             contact_agent = EnhancedContactExtractionAgent(self.ai_manager, self.logger, self)
             context = await contact_agent.execute(context)
             
-            # 요청된 필드만 반환
-            for field in missing_fields:
-                if field in context.extracted_data:
-                    results[field] = context.extracted_data[field]
-                    self.logger.info(f"  🎯 AI로 {field} 발견: {results[field]}")
-            
-            return results
-            
-        except Exception as e:
-            self.logger.error(f"AI 누락 정보 검색 오류: {org_name} - {e}")
-            return {}
-    
-    def validate_and_clean_data(self, org_data: Dict[str, Any]) -> Dict[str, Any]:
-        """데이터 검증 및 정리 - ContactEnrichmentService 호환성 (AI 강화)"""
-        try:
-            cleaned_data = org_data.copy()
-            
-            # 기존 validator.py 사용 (유지)
-            if self.contact_validator:
-                # 전화번호 검증
-                if cleaned_data.get('phone'):
-                    is_valid, validated_phone = self.contact_validator.validate_phone_number(cleaned_data['phone'])
-                    if is_valid:
-                        cleaned_data['phone'] = validated_phone
-                        cleaned_data['phone_validation'] = 'valid'
-                    else:
-                        self.logger.warning(f"유효하지 않은 전화번호: {cleaned_data['phone']}")
-                        cleaned_data['phone_validation'] = 'invalid'
-                
-                # 팩스번호 검증
-                if cleaned_data.get('fax'):
-                    is_valid, validated_fax = self.contact_validator.validate_fax_number(cleaned_data['fax'])
-                    if is_valid:
-                        cleaned_data['fax'] = validated_fax
-                        cleaned_data['fax_validation'] = 'valid'
-                    else:
-                        self.logger.warning(f"유효하지 않은 팩스번호: {cleaned_data['fax']}")
-                        cleaned_data['fax_validation'] = 'invalid'
-            
-            # AI 검증 추가
-            if self.ai_manager:
-                try:
-                    # AI 검증 에이전트 실행
-                    context = CrawlingContext(
-                        organization={'name': cleaned_data.get('name', 'Unknown')},
-                        current_stage=CrawlingStage.AI_VERIFICATION,
-                        extracted_data=cleaned_data,
-                        ai_insights={},
-                        error_log=[],
-                        processing_time=0,
-                        confidence_scores={}
-                    )
-                    
-                    # AI 검증 에이전트 실행 (동기 방식으로 간단히)
-                    verification_agent = AIVerificationAgent(self.ai_manager, self.logger, self)
-                    # 비동기 호출을 동기로 변환
-                    import asyncio
-                    if asyncio.get_event_loop().is_running():
-                        # 이미 이벤트 루프가 실행 중인 경우
-                        task = asyncio.create_task(verification_agent.execute(context))
-                        # 간단한 AI 검증만 수행
-                        cleaned_data['ai_validation_attempted'] = True
-                    else:
-                        context = asyncio.run(verification_agent.execute(context))
-                        cleaned_data['ai_insights'] = context.ai_insights
-                        cleaned_data['confidence_scores'] = context.confidence_scores
-                
-                except Exception as e:
-                    self.logger.warning(f"AI 검증 실패: {e}")
-                    cleaned_data['ai_validation_error'] = str(e)
-            
-            return cleaned_data
+            if context.extracted_data.get('phone'):
+                return {
+                    "phone": context.extracted_data['phone'],
+                    "confidence": context.confidence_scores.get('phone', 0.5),
+                    "source": context.extracted_data.get('phone_source', 'AI 검색'),
+                    "status": "success",
+                    "ai_enhanced": True
+                }
+            else:
+                return {
+                    "phone": "",
+                    "status": "not_found",
+                    "message": "AI 기반 전화번호 검색 결과 없음"
+                }
             
         except Exception as e:
-            self.logger.error(f"데이터 검증 오류: {e}")
-            return org_data
-    
-    # ==================== app.py 호환성 메서드들 ====================
-    
-    async def process_json_file_async(self, json_file_path: str, test_mode: bool = False, test_count: int = 10, progress_callback=None) -> List[Dict]:
-        """🔧 app.py 호환성을 위한 래퍼 메서드 (AI 강화)"""
-        try:
-            # JSON 파일 로드
-            data = FileUtils.load_json(json_file_path)
-            
-            # 데이터 전처리 (app.py와 동일한 방식)
-            organizations = []
-            if isinstance(data, dict):
-                for category, orgs in data.items():
-                    if isinstance(orgs, list):
-                        for org in orgs:
-                            if isinstance(org, dict):
-                                org["category"] = category
-                                organizations.append(org)
-            elif isinstance(data, list):
-                organizations = [org for org in data if isinstance(org, dict)]
-            
-            # 테스트 모드 처리
-            if test_mode and test_count:
-                organizations = organizations[:test_count]
-            
-            # progress_callback 저장
-            self.progress_callback = progress_callback
-            
-            # AI 강화 처리 실행
-            results = await self.process_organizations(organizations)
-            
-            return results
-            
-        except Exception as e:
-            self.logger.error(f"JSON 파일 처리 실패: {e}")
-            return []
+            self.logger.error(f"AI 전화번호 검색 오류: {org_name} - {e}")
+            return {"status": "error", "error": str(e)}
 
-    async def _fallback_to_traditional_processing(self, context: CrawlingContext):
-        """AI 에이전트 없을 때 기본 모듈 처리"""
+    async def search_fax_number(self, org_name: str, phone: str = "", address: str = "") -> Dict[str, Any]:
+        """팩스번호 검색 - ContactEnrichmentService 호환성 (AI 강화)"""
         try:
-            org_name = context.organization.get('name', 'Unknown')
-            self.logger.info(f"🔧 기본 모듈 처리: {org_name}")
+            self.logger.info(f"📠 AI 팩스번호 검색: {org_name}")
             
-            # 기본 홈페이지 검색 (url_extractor 사용)
-            if self.homepage_parser:
-                try:
-                    # 간단한 홈페이지 검색 로직
-                    pass
-                except Exception as e:
-                    self.logger.warning(f"홈페이지 검색 실패: {e}")
+            # AI 에이전트를 통한 팩스 검색
+            context = CrawlingContext(
+                organization={'name': org_name, 'address': address},
+                current_stage=CrawlingStage.FAX_SEARCH,
+                extracted_data={'phone': phone, 'address': address},
+                ai_insights={},
+                error_log=[],
+                processing_time=0,
+                confidence_scores={}
+            )
             
-            # 기본 전화번호 검색 (phone_extractor 사용)
-            if self.phone_driver:
-                try:
-                    found_phones = search_phone_number(self.phone_driver, org_name)
-                    if found_phones:
-                        context.extracted_data['phone'] = found_phones[0]
-                        self.update_confidence(context, 'phone', 0.7)
-                except Exception as e:
-                    self.logger.warning(f"전화번호 검색 실패: {e}")
+            # 연락처 추출 에이전트 실행 (팩스 포함)
+            contact_agent = EnhancedContactExtractionAgent(self.ai_manager, self.logger, self)
+            context = await contact_agent.execute(context)
             
-            # 기본 팩스번호 검색 (fax_extractor 사용)
-            if self.fax_extractor:
-                try:
-                    found_faxes = self.fax_extractor.search_fax_number(org_name)
-                    if found_faxes:
-                        context.extracted_data['fax'] = found_faxes[0]
-                        self.update_confidence(context, 'fax', 0.7)
-                except Exception as e:
-                    self.logger.warning(f"팩스번호 검색 실패: {e}")
+            if context.extracted_data.get('fax'):
+                return {
+                    "fax": context.extracted_data['fax'],
+                    "confidence": context.confidence_scores.get('fax', 0.5),
+                    "source": context.extracted_data.get('fax_source', 'AI 검색'),
+                    "status": "success",
+                    "ai_enhanced": True
+                }
+            else:
+                return {
+                    "fax": "",
+                    "status": "not_found",
+                    "message": "AI 기반 팩스번호 검색 결과 없음"
+                }
             
         except Exception as e:
-            self.logger.error(f"기본 모듈 처리 실패: {e}")
-    
-    async def _fallback_to_traditional_processing_simple(self, org: Dict) -> Dict:
-        """간단한 기본 처리 (실패 시 대체)"""
-        result = org.copy()
-        result['processing_metadata'] = {
-            'extraction_method': 'fallback_traditional',
-            'ai_enhanced': False,
-            'timestamp': datetime.now().isoformat(),
-            'status': 'fallback_processed'
+            self.logger.error(f"AI 팩스번호 검색 오류: {org_name} - {e}")
+            return {"status": "error", "error": str(e)}
+
+    def get_statistics(self) -> Dict[str, Any]:
+        """크롤링 통계 반환 - ContactEnrichmentService 호환성"""
+        return {
+            "total_processed": self.stats["total_processed"],
+            "successful": self.stats["successful"],
+            "failed": self.stats["failed"],
+            "ai_enhanced": self.stats["ai_enhanced"],
+            "phone_extracted": self.stats["phone_extracted"],
+            "fax_extracted": self.stats["fax_extracted"],
+            "saved_to_db": self.stats["saved_to_db"],
+            "agent_stats": self.stats["agent_stats"],
+            "processing_time": self.stats.get("end_time", time.time()) - self.stats["start_time"]
         }
-        return result
 
-# 기존 호환성을 위한 별칭 (ModularUnifiedCrawler를 AI 강화 버전으로 교체)
-ModularUnifiedCrawler = AIEnhancedModularUnifiedCrawler
+# ==================== 메인 실행 함수 ====================
 
-# ==================== 편의 함수들 ====================
-
-async def crawl_ai_enhanced_from_file(input_file: str, options: Dict = None) -> List[Dict]:
-    """파일에서 데이터를 로드하여 AI 강화 크롤링"""
+async def main():
+    """메인 실행 함수"""
     try:
-        # 파일 로드
-        data = FileUtils.load_json(input_file)
+        print("🚀 AI 강화 모듈러 통합 크롤링 시스템 시작")
+        print("="*80)
         
-        # AI 강화 크롤러 생성 및 실행
+        # 크롤러 초기화
         crawler = AIEnhancedModularUnifiedCrawler()
-        results = await crawler.process_organizations(data, options)
         
-        return results
+        # 데이터베이스에서 미처리 조직 가져오기
+        db = get_database()  # ChurchCRMDatabase 인스턴스 가져오기
         
-    except Exception as e:
-        logging.error(f"AI 강화 파일 크롤링 실패: {e}")
-        return []
-
-async def crawl_ai_enhanced_latest_file(options: Dict = None) -> List[Dict]:
-    """최신 입력 파일을 자동으로 찾아서 AI 강화 크롤링"""
-    try:
-        latest_file = get_latest_input_file()
-        if not latest_file:
-            raise ValueError("입력 파일을 찾을 수 없습니다.")
+        # AI 크롤링이 필요한 조직들 조회 (ai_crawled가 False이거나 NULL인 경우)
+        # get_organizations_for_ai_crawling 메서드가 없으므로 기존 메서드 사용
+        organizations_data = db.get_organizations_paginated(
+            page=1, 
+            per_page=50,  # 테스트용으로 50개 제한
+            filters={
+                'ai_crawled': False  # AI 크롤링이 안된 조직들만
+            }
+        )
         
-        print(f"📂 최신 파일 사용: {latest_file}")
-        return await crawl_ai_enhanced_from_file(str(latest_file), options)
-        
-    except Exception as e:
-        logging.error(f"AI 강화 최신 파일 크롤링 실패: {e}")
-        return []
-
-async def crawl_ai_enhanced_from_database(options: Dict = None) -> List[Dict]:
-    """데이터베이스에서 데이터를 로드하여 AI 강화 크롤링 (수정된 버전)"""
-    try:
-        # 데이터베이스 연결
-        from database.database import get_database
-        db = get_database()
-        
-        # 🔥 조직 데이터 조회 (중복 방지 강화)
-        with db.get_connection() as conn:
-            query = """
-            SELECT id, name, type, category, subcategory, homepage, phone, fax, email, 
-                   mobile, postal_code, address, organization_size, denomination,
-                   ai_crawled, last_crawled_at
-            FROM organizations 
-            WHERE is_active = 1 
-            AND (
-                (homepage = '' OR homepage IS NULL) OR
-                (phone = '' OR phone IS NULL) OR 
-                (fax = '' OR fax IS NULL) OR
-                (email = '' OR email IS NULL)
-            )
-            AND name IS NOT NULL AND name != ''
-            -- 🔥 중복 방지: 7일 이내 크롤링하지 않은 것만
-            AND (
-                ai_crawled = 0 OR 
-                ai_crawled IS NULL OR
-                last_crawled_at IS NULL OR
-                datetime(last_crawled_at) < datetime('now', '-7 days')
-            )
-            ORDER BY 
-                CASE WHEN ai_crawled = 0 OR ai_crawled IS NULL THEN 0 ELSE 1 END,  -- 미크롤링 우선
-                last_crawled_at ASC NULLS FIRST,  -- 오래된 것 우선
-                updated_at DESC
-            LIMIT 500
-            """
-            cursor = conn.execute(query)
-            rows = cursor.fetchall()
-            
-            # 딕셔너리 형태로 변환
-            organizations = []
-            for row in rows:
-                org = dict(row)
-                organizations.append({
-                    'db_id': org.get('id'),
-                    'name': org.get('name', ''),
-                    'type': org.get('type', 'CHURCH'),
-                    'category': org.get('category', '종교시설'),
-                    'subcategory': org.get('subcategory', ''),
-                    'homepage': org.get('homepage', ''),
-                    'phone': org.get('phone', ''),
-                    'fax': org.get('fax', ''),
-                    'email': org.get('email', ''),
-                    'mobile': org.get('mobile', ''),
-                    'postal_code': org.get('postal_code', ''),
-                    'address': org.get('address', ''),
-                    'organization_size': org.get('organization_size', ''),
-                    'denomination': org.get('denomination', '')
-                })
+        organizations = organizations_data.get('organizations', [])
         
         if not organizations:
-            print("📋 크롤링이 필요한 조직이 없습니다.")
-            print("🎯 조건: 연락처 누락 + 7일 이내 크롤링 안 됨")
-            return []
-        
-        print(f"📂 데이터베이스에서 {len(organizations)}개 조직 로드")
-        print(f"🎯 선택 조건:")
-        print(f"  - 연락처 정보 누락 (homepage/phone/fax/email)")
-        print(f"  - 7일 이내 크롤링 안 됨 (ai_crawled=0 OR last_crawled_at < 7일 전)")
-        print(f"  - 우선순위: 미크롤링 → 오래된 크롤링 → 최신 업데이트")
-        
-        # AI 강화 크롤러 생성 및 실행
-        crawler = AIEnhancedModularUnifiedCrawler()
-        results = await crawler.process_organizations(organizations, options)
-        
-        # 결과를 데이터베이스에 업데이트
-        updated_count = 0
-        for result in results:
-            if result.get('db_id'):
-                success = await crawler.save_to_database(result)
-                if success:
-                    updated_count += 1
-        
-        print(f"💾 데이터베이스 업데이트: {updated_count}개 조직")
-        
-        return results
-        
-    except Exception as e:
-        logging.error(f"AI 강화 데이터베이스 크롤링 실패: {e}")
-        return []
-
-# 메인 실행 함수
-async def main():
-    """메인 실행 함수 (AI 강화)"""
-    print("🤖 AI 강화 모듈러 통합 크롤링 시스템 시작")
-    print("="*80)
-    print("🚀 AI 기능 최대 활용 모드")
-    print("📦 전문 모듈 + AI 에이전트 통합:")
-    print(f"  - fax_extractor.py: {'✅' if FAX_EXTRACTOR_AVAILABLE else '❌'}")
-    print(f"  - phone_extractor.py: {'✅' if PHONE_EXTRACTOR_AVAILABLE else '❌'}")
-    print(f"  - url_extractor.py: {'✅' if URL_EXTRACTOR_AVAILABLE else '❌'}")
-    print(f"  - validator.py: {'✅' if VALIDATOR_AVAILABLE else '❌'}")
-    print(f"  - database.py: {'✅' if DATABASE_AVAILABLE else '❌'}")
-    print("🤖 AI 에이전트:")
-    print("  - EnhancedHomepageSearchAgent: AI 기반 종합 홈페이지 검색 (공식사이트 + 소셜미디어)")
-    print("  - EnhancedHomepageAnalysisAgent: AI 기반 홈페이지 분석 (BS4 → JS → AI)")
-    print("  - ContactPageSearchAgent: 연락처 페이지 전용 AI 에이전트 (혁신적!)")
-    print("  - EnhancedContactExtractionAgent: AI 강화 연락처 추출 (주소 기반)")
-    print("  - AIVerificationAgent: AI 종합 검증")
-    print("="*80)
-    
-    try:
-        # 프로젝트 초기화
-        initialize_project()
-        
-        # 데이터베이스 연결 확인
-        if not DATABASE_AVAILABLE:
-            print("❌ 데이터베이스 모듈을 사용할 수 없습니다.")
+            print("🔍 AI 크롤링이 필요한 조직이 없습니다.")
             return
         
-        # 우선 데이터베이스에서 크롤링 시도
-        print("🗃️ 데이터베이스에서 크롤링 대상 조회 중...")
-        results = await crawl_ai_enhanced_from_database()
+        print(f"📋 AI 크롤링 대상: {len(organizations)}개 조직")
         
-        # 데이터베이스에서 처리할 데이터가 없으면 파일에서 시도
-        if not results:
-            print("📁 입력 파일에서 크롤링 시도 중...")
-            try:
-                results = await crawl_ai_enhanced_latest_file()
-            except Exception as e:
-                print(f"⚠️ 입력 파일 크롤링도 실패: {e}")
+        # 크롤링 옵션 설정
+        options = {
+            'enable_ai': True,
+            'enable_traditional_fallback': True,
+            'verification_level': 'comprehensive',
+            'save_to_db': True,
+            'max_concurrent': 3,  # 동시 처리 제한
+            'delay_between_requests': 2.0  # 요청 간 지연
+        }
         
-        if results:
-            ai_enhanced_count = sum(1 for r in results if r.get('ai_enhanced'))
-            print(f"\n✅ AI 강화 크롤링 완료: {len(results)}개 조직 처리")
-            print(f"🤖 AI 강화된 조직: {ai_enhanced_count}개")
-            print(f"📈 AI 강화율: {(ai_enhanced_count/len(results)*100):.1f}%")
-        else:
-            print("\n❌ AI 강화 크롤링 실패")
-            
+        # 조직 처리
+        results = await crawler.process_organizations(organizations, options)
+        
+        # 통계 출력
+        crawler.print_ai_enhanced_statistics()
+        
+        # 성공적으로 처리된 결과 요약
+        successful_results = [r for r in results if r and r.get('success')]
+        print(f"\n✅ 성공적으로 처리된 조직: {len(successful_results)}개")
+        
+        # 리소스 정리
+        crawler.cleanup_modules()
+        
+        print("🎉 AI 강화 모듈러 크롤링 완료!")
+        
     except KeyboardInterrupt:
-        print("\n⏹️ 사용자에 의해 중단되었습니다.")
+        print("\n⚠️ 사용자에 의해 중단되었습니다.")
     except Exception as e:
-        print(f"\n❌ 예상치 못한 오류: {e}")
+        print(f"❌ 크롤링 중 오류 발생: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        # 정리 작업
+        try:
+            if 'crawler' in locals():
+                crawler.cleanup_modules()
+        except:
+            pass
 
 if __name__ == "__main__":
+    # 비동기 실행
     asyncio.run(main())
