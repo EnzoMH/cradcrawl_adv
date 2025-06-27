@@ -59,11 +59,11 @@ class API {
     }
 
     static async getDashboardData() {
-        return this.get('/api/stats/dashboard-data');
+        return this.get('/api/statistics/basic-stats');
     }
 
     static async getRealTimeResults(limit = 5) {
-        return this.get('/api/real-time-results', { limit });
+        return this.get('/api/statistics/real-time-results', { limit });
     }
 
     // ===== 기관 관리 API =====
@@ -121,19 +121,19 @@ class API {
 
     // ===== 크롤링 API =====
     static async startCrawling(config) {
-        return this.post('/api/crawling/start', config);
+        return this.post('/api/enrichment/start-file-crawling', config);
     }
 
     static async stopCrawling() {
-        return this.post('/api/crawling/stop');
+        return this.post('/api/enrichment/stop-crawling');
     }
 
     static async getCrawlingStatus() {
-        return this.get('/api/crawling/status');
+        return this.get('/api/enrichment/crawling-progress');
     }
 
     static async getCrawlingResults() {
-        return this.get('/api/crawling/results');
+        return this.get('/api/enrichment/crawling-results');
     }
 
     // ===== 활동 관리 API =====

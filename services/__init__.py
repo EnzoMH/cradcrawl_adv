@@ -5,8 +5,12 @@ CRM 서비스 레이어
 
 from .contact_enrichment_service import ContactEnrichmentService
 from .organization_service import OrganizationService
+from .crawling_service import get_crawling_service, CrawlingService, CrawlingJobConfig
 
 __all__ = [
     'ContactEnrichmentService',
-    'OrganizationService'
+    'OrganizationService',
+    'CrawlingService',
+    'CrawlingJobConfig',
+    'get_crawling_service'
 ] 

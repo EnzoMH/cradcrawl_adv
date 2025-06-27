@@ -66,53 +66,79 @@
 - **활동 이력 추적**: 사용자 행동 로깅
 - **비밀번호 보안**: PBKDF2 해시화
 
-## 🔥 최신 업데이트 (2025.06.18)
+## 🔥 최신 업데이트 (2024.12.20) - v2.0.0 리팩토링 완료
 
-### 📊 React 리팩토링 완료
-새로운 아키텍처로 완전히 전환되었습니다:
+### 🚀 대규모 아키텍처 리팩토링 완료
+**Phase 1-4 리팩토링**을 통해 새로운 모듈형 아키텍처로 완전히 전환되었습니다:
 
-#### ⚛️ JavaScript 모듈 구조
+#### 🏗️ 새로운 4-Layer 아키텍처
 ```
+Frontend (Templates/JS) → API Layer → Service Layer → Database Layer
+```
+
+#### 📁 API 레이어 구조 (NEW!)
+```python
+api/
+├── organization_api.py   # 기관 관리 API (15개 엔드포인트)
+├── enrichment_api.py     # 연락처 보강 API (14개 엔드포인트)  
+├── statistics_api.py     # 통계 분석 API (11개 엔드포인트)
+└── __init__.py          # API 라우터 통합
+```
+
+#### 🔧 서비스 레이어 구조 (NEW!)
+```python
+services/
+├── organization_service.py         # 기관 관리 비즈니스 로직
+├── contact_enrichment_service.py   # 연락처 보강 서비스
+├── crawling_service.py             # 크롤링 작업 관리 (싱글톤)
+└── __init__.py                     # 서비스 통합
+```
+
+#### ⚛️ 프론트엔드 개선
+```javascript
 templates/js/
-├── utils.js          # 공통 유틸리티 (전역)
-├── api.js            # 통합 API 클래스 (전역)
-├── main.js           # CRM 시스템 메인 로직 (단순화)
-├── ui.js             # UI 렌더링 (기존 유지)
-├── dashboard.js      # 대시보드 React 컴포넌트
-├── organizations.js  # 기관 관리 React 컴포넌트 (37KB, 1108줄)
-└── enrichment.js     # 연락처 보강 React 컴포넌트 (16KB, 474줄)
+├── utils.js          # 공통 유틸리티 함수
+├── api.js            # 통합 API 클래스 (새 엔드포인트 연결)
+├── main.js           # CRM 시스템 메인 로직 (API 경로 업데이트)
+├── ui.js             # UI 렌더링 컴포넌트
+├── dashboard.js      # React 기반 대시보드
+├── organizations.js  # 기관 관리 React 컴포넌트
+├── enrichment.js     # 연락처 보강 React 컴포넌트
+└── statistics.js     # 통계 분석 JavaScript (Bootstrap 기반)
 ```
 
-#### 🔧 서비스 레이어 구축
-```python
-# OrganizationService - 기관 관리 서비스
-class OrganizationService:
-    def search_organizations(self, filters, pagination)
-    def get_enrichment_candidates(self, criteria)
-    def calculate_completeness_score(self, organization)
-    def track_user_activity(self, user_id, action)
-
-# ContactEnrichmentService - 연락처 보강 서비스
-class ContactEnrichmentService:
-    def enrich_single_organization(self, org_id, callback)
-    def enrich_batch_organizations(self, org_ids, callback)
-    def auto_enrich_missing_contacts(self, criteria, callback)
-    def get_enrichment_statistics(self)
+#### 🎨 통계 페이지 CSS 완성
+```css
+templates/css/style.css  # 통계 페이지 전용 스타일 추가
+├── 사이드바 메뉴 스타일 (그라데이션 효과)
+├── 통계 카드 및 차트 컨테이너
+├── 테이블 호버 효과 및 뱃지 시스템
+├── 품질 지표 및 알림 스타일
+├── 반응형 디자인 (모바일 최적화)
+└── 다크모드 지원 (미래 확장용)
 ```
 
-#### 🌐 API 레이어 구축
-```python
-# RESTful API 엔드포인트
-@app.get("/api/organizations")           # 기관 목록 조회 (페이징, 검색, 필터링)
-@app.get("/api/organizations/{id}")      # 기관 상세 조회
-@app.post("/api/organizations")          # 새 기관 생성
-@app.put("/api/organizations/{id}")      # 기관 정보 수정
-@app.delete("/api/organizations/{id}")   # 기관 삭제
+### 📊 주요 개선사항
 
-@app.post("/api/enrichment/single/{id}") # 단일 기관 보강
-@app.post("/api/enrichment/batch")       # 다중 기관 일괄 보강
-@app.post("/api/enrichment/auto")        # 자동 보강 시작
-```
+#### 🔄 API 엔드포인트 재구성
+- **기존**: 중복된 API들이 `app.py`와 `crm_app.py`에 혼재
+- **신규**: 기능별로 분리된 전용 API 모듈
+  ```
+  /api/organizations/*   → organization_api.py
+  /api/enrichment/*      → enrichment_api.py  
+  /api/statistics/*      → statistics_api.py
+  ```
+
+#### 🧹 코드 정리 결과
+- **crm_app.py**: 1003라인 → 365라인 (63% 감소)
+- **중복 API**: 약 20개 엔드포인트 제거
+- **전역 변수**: 서비스 레이어로 이관
+- **Import 구문**: 불필요한 의존성 제거
+
+#### ⚡ 성능 최적화
+- **싱글톤 패턴**: CrawlingService 메모리 효율성
+- **데몬 스레드**: 백그라운드 작업 메모리 누수 방지
+- **API 응답 시간**: 레이어 분리로 처리 속도 향상
 
 ### 🗄️ 데이터베이스 확장
 - **총 기관 수**: 28,104개 → **218,039개**로 확장

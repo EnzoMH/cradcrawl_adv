@@ -1476,6 +1476,10 @@ class AIEnhancedModularUnifiedCrawler:
             # 업데이트할 데이터 준비
             update_data = {}
             
+            # 🔥 크롤링 상태 필드 업데이트 (항상 실행)
+            update_data['ai_crawled'] = True
+            update_data['last_crawled_at'] = datetime.now().isoformat()
+            
             # 크롤링으로 얻은 새로운 정보만 업데이트
             if org_data.get('homepage') and org_data['homepage'] != '':
                 update_data['homepage'] = org_data['homepage']
@@ -1509,6 +1513,7 @@ class AIEnhancedModularUnifiedCrawler:
                 success = db.update_organization(db_id, update_data, 'crawler_system')
                 if success:
                     self.logger.info(f"✅ 조직 업데이트 완료: {org_data.get('name')} (ID: {db_id})")
+                    self.logger.info(f"🎯 크롤링 상태: ai_crawled=True, last_crawled_at={update_data['last_crawled_at']}")
                     return {'action': 'updated', 'id': db_id}
                 else:
                     self.logger.error(f"❌ 조직 업데이트 실패: {org_data.get('name')} (ID: {db_id})")
@@ -1878,11 +1883,12 @@ async def crawl_ai_enhanced_from_database(options: Dict = None) -> List[Dict]:
         from database.database import get_database
         db = get_database()
         
-        # 조직 데이터 조회 (더 정교한 조건)
+        # 🔥 조직 데이터 조회 (중복 방지 강화)
         with db.get_connection() as conn:
             query = """
             SELECT id, name, type, category, subcategory, homepage, phone, fax, email, 
-                   mobile, postal_code, address, organization_size, denomination
+                   mobile, postal_code, address, organization_size, denomination,
+                   ai_crawled, last_crawled_at
             FROM organizations 
             WHERE is_active = 1 
             AND (
@@ -1892,7 +1898,17 @@ async def crawl_ai_enhanced_from_database(options: Dict = None) -> List[Dict]:
                 (email = '' OR email IS NULL)
             )
             AND name IS NOT NULL AND name != ''
-            ORDER BY updated_at DESC
+            -- 🔥 중복 방지: 7일 이내 크롤링하지 않은 것만
+            AND (
+                ai_crawled = 0 OR 
+                ai_crawled IS NULL OR
+                last_crawled_at IS NULL OR
+                datetime(last_crawled_at) < datetime('now', '-7 days')
+            )
+            ORDER BY 
+                CASE WHEN ai_crawled = 0 OR ai_crawled IS NULL THEN 0 ELSE 1 END,  -- 미크롤링 우선
+                last_crawled_at ASC NULLS FIRST,  -- 오래된 것 우선
+                updated_at DESC
             LIMIT 500
             """
             cursor = conn.execute(query)
@@ -1921,9 +1937,14 @@ async def crawl_ai_enhanced_from_database(options: Dict = None) -> List[Dict]:
         
         if not organizations:
             print("📋 크롤링이 필요한 조직이 없습니다.")
+            print("🎯 조건: 연락처 누락 + 7일 이내 크롤링 안 됨")
             return []
         
         print(f"📂 데이터베이스에서 {len(organizations)}개 조직 로드")
+        print(f"🎯 선택 조건:")
+        print(f"  - 연락처 정보 누락 (homepage/phone/fax/email)")
+        print(f"  - 7일 이내 크롤링 안 됨 (ai_crawled=0 OR last_crawled_at < 7일 전)")
+        print(f"  - 우선순위: 미크롤링 → 오래된 크롤링 → 최신 업데이트")
         
         # AI 강화 크롤러 생성 및 실행
         crawler = AIEnhancedModularUnifiedCrawler()

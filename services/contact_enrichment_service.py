@@ -277,6 +277,10 @@ class ContactEnrichmentService:
             updates['updated_by'] = updated_by
             updates['updated_at'] = datetime.now().isoformat()
             
+            # 🔥 크롤링 상태 필드 추가
+            updates['ai_crawled'] = True
+            updates['last_crawled_at'] = datetime.now().isoformat()
+            
             # 크롤링 메타데이터 추가
             crawling_metadata = {
                 "last_enrichment": datetime.now().isoformat(),
@@ -304,6 +308,7 @@ class ContactEnrichmentService:
             
             if success:
                 self.logger.info(f"✅ 기관 ID {org_id} 연락처 정보 업데이트 완료")
+                self.logger.info(f"🎯 크롤링 상태: ai_crawled=True, last_crawled_at={updates['last_crawled_at']}")
             
             return success
             

@@ -123,6 +123,10 @@ class ChurchCRMDatabase:
             -- 크롤링 메타데이터 (JSON)
             crawling_data TEXT,               -- homepage_parsed, ai_summary 등
             
+            -- 🔥 크롤링 추적 필드 (NEW)
+            ai_crawled BOOLEAN DEFAULT 0,     -- AI 크롤링 완료 여부
+            last_crawled_at DATETIME,         -- 마지막 크롤링 시간
+            
             -- 시스템 필드
             created_by TEXT,
             updated_by TEXT,
@@ -266,6 +270,10 @@ class ChurchCRMDatabase:
             "CREATE INDEX IF NOT EXISTS idx_org_status ON organizations(contact_status)",
             "CREATE INDEX IF NOT EXISTS idx_org_assigned ON organizations(assigned_to)",
             "CREATE INDEX IF NOT EXISTS idx_org_created ON organizations(created_at)",
+            
+            # 🔥 크롤링 추적 관련 인덱스 (NEW)
+            "CREATE INDEX IF NOT EXISTS idx_org_ai_crawled ON organizations(ai_crawled)",
+            "CREATE INDEX IF NOT EXISTS idx_org_last_crawled ON organizations(last_crawled_at)",
             
             # 사용자
             "CREATE INDEX IF NOT EXISTS idx_user_username ON users(username)",

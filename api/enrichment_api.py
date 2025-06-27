@@ -11,6 +11,9 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Path
 from pydantic import BaseModel, Field
+import json
+import threading
+import os
 
 from services.contact_enrichment_service import ContactEnrichmentService, EnrichmentRequest
 from services.organization_service import OrganizationService
@@ -42,9 +45,128 @@ class EnrichmentResponseModel(BaseModel):
     total_fields_found: int
     results: List[Dict[str, Any]]
 
-# 전역 변수 (진행 상황 추적용)
-current_enrichment_job = None
-enrichment_progress = {}
+# 전역 변수들은 CrawlingService로 이관됨
+
+# ==================== 크롤링 API (CrawlingService 통합) ====================
+
+from services.crawling_service import get_crawling_service, CrawlingJobConfig
+
+class FileCrawlingRequestModel(BaseModel):
+    """파일 기반 크롤링 요청 모델"""
+    test_mode: bool = Field(False, description="테스트 모드")
+    test_count: int = Field(10, description="테스트 개수", ge=1, le=100)
+    use_ai: bool = Field(True, description="AI 사용 여부")
+    job_name: Optional[str] = Field(None, description="작업명")
+    started_by: str = Field("API_USER", description="시작자")
+
+class DBCrawlingRequestModel(BaseModel):
+    """DB 기반 크롤링 요청 모델"""
+    use_ai: bool = Field(True, description="AI 사용 여부")
+    max_concurrent: int = Field(3, description="최대 동시 처리 수", ge=1, le=10)
+    job_name: Optional[str] = Field(None, description="작업명")
+    started_by: str = Field("API_USER", description="시작자")
+
+@router.post("/start-file-crawling", summary="파일 기반 크롤링 시작")
+async def start_file_crawling(request: FileCrawlingRequestModel):
+    """파일 기반 Enhanced 크롤링 시작 (CrawlingService 사용)"""
+    try:
+        # CrawlingService 인스턴스 가져오기
+        crawling_service = get_crawling_service()
+        
+        # 설정 변환
+        config = CrawlingJobConfig(
+            test_mode=request.test_mode,
+            test_count=request.test_count,
+            use_ai=request.use_ai,
+            job_name=request.job_name,
+            started_by=request.started_by
+        )
+        
+        # 파일 기반 크롤링 시작
+        result = await crawling_service.start_file_crawling(config)
+        
+        logger.info(f"✅ 파일 기반 크롤링 시작: {result}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"❌ 파일 기반 크롤링 시작 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"크롤링 시작 실패: {str(e)}")
+
+@router.post("/start-db-crawling", summary="DB 기반 크롤링 시작")
+async def start_db_crawling(request: DBCrawlingRequestModel):
+    """DB 기반 크롤링 시작 (CrawlingService 사용)"""
+    try:
+        # CrawlingService 인스턴스 가져오기
+        crawling_service = get_crawling_service()
+        
+        # 설정 변환
+        config = CrawlingJobConfig(
+            use_ai=request.use_ai,
+            max_concurrent=request.max_concurrent,
+            job_name=request.job_name,
+            started_by=request.started_by
+        )
+        
+        # DB 기반 크롤링 시작
+        result = await crawling_service.start_db_crawling(config)
+        
+        logger.info(f"✅ DB 기반 크롤링 시작: {result}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"❌ DB 기반 크롤링 시작 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"DB 크롤링 시작 실패: {str(e)}")
+
+@router.get("/crawling-progress", summary="크롤링 진행 상황 조회")
+async def get_crawling_progress():
+    """크롤링 진행 상황 조회 (CrawlingService 사용)"""
+    try:
+        crawling_service = get_crawling_service()
+        progress = crawling_service.get_crawling_progress()
+        return progress
+    except Exception as e:
+        logger.error(f"❌ 진행 상황 조회 실패: {e}")
+        return {"status": "error", "message": str(e)}
+
+@router.get("/crawling-results", summary="크롤링 결과 조회")
+async def get_crawling_results(
+    limit: int = Query(10, ge=1, le=100, description="조회할 결과 수"),
+    all_results: bool = Query(False, description="모든 결과 조회 여부")
+):
+    """크롤링 결과 조회 (CrawlingService 사용)"""
+    try:
+        crawling_service = get_crawling_service()
+        results = crawling_service.get_crawling_results(limit=limit, all_results=all_results)
+        return results
+    except Exception as e:
+        logger.error(f"❌ 크롤링 결과 조회 실패: {e}")
+        return {"results": [], "total_count": 0, "error": str(e)}
+
+@router.get("/latest-crawling-results", summary="최신 크롤링 결과 조회")
+async def get_latest_crawling_results():
+    """최신 크롤링 작업 결과 조회 (CrawlingService 사용)"""
+    try:
+        crawling_service = get_crawling_service()
+        results = crawling_service.get_latest_crawling_results()
+        return results
+        
+    except Exception as e:
+        logger.error(f"❌ 최신 크롤링 결과 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"결과 조회 실패: {str(e)}")
+
+@router.post("/stop-crawling", summary="크롤링 중지")
+async def stop_crawling():
+    """진행 중인 크롤링 작업 중지 (CrawlingService 사용)"""
+    try:
+        crawling_service = get_crawling_service()
+        result = crawling_service.stop_crawling()
+        
+        logger.info(f"✅ 크롤링 중지: {result}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"❌ 크롤링 중지 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"크롤링 중지 실패: {str(e)}")
 
 @router.get("/missing-contacts", summary="누락된 연락처 정보 기관 목록")
 async def get_organizations_with_missing_contacts(

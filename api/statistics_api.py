@@ -620,3 +620,65 @@ async def export_statistics_data(
     except Exception as e:
         logger.error(f"❌ 데이터 내보내기 실패: {e}")
         raise HTTPException(status_code=500, detail=f"데이터 내보내기 실패: {str(e)}")
+
+@router.get("/real-time-results", summary="실시간 결과 조회")
+async def get_real_time_results(limit: int = Query(5, ge=1, le=20, description="최대 조회 수")):
+    """실시간 결과 조회 - 최근 업데이트된 기관들 (crm_app.py에서 이전)"""
+    try:
+        # 최근 업데이트된 기관들 조회
+        with get_database().get_connection() as conn:
+            cursor = conn.execute("""
+                SELECT id, name, category, phone, email, updated_at
+                FROM organizations 
+                WHERE is_active = 1 
+                ORDER BY updated_at DESC 
+                LIMIT ?
+            """, (limit,))
+            
+            results = []
+            for row in cursor.fetchall():
+                org_id, name, category, phone, email, updated_at = row
+                results.append({
+                    "id": org_id,
+                    "name": name,
+                    "category": category,
+                    "phone": phone,
+                    "email": email,
+                    "updated_at": updated_at,
+                    "has_complete_contact": bool(phone and email)
+                })
+        
+        return {
+            "status": "success",
+            "data": results,
+            "total": len(results),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ 실시간 결과 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"실시간 결과 조회 실패: {str(e)}")
+
+# ==================== 기본 통계 API (app.py에서 이전) ====================
+
+@router.get("/basic-stats", summary="기본 통계 정보")
+async def get_basic_statistics():
+    """간단한 데이터 통계 API - DB 기반 (app.py에서 이전)"""
+    try:
+        db = get_database()
+        stats = db.get_dashboard_stats()
+        
+        return {
+            'status': 'success',
+            'data': {
+                'total_organizations': stats['total_organizations'],
+                'total_users': stats['total_users'],
+                'recent_activities': stats['recent_activities'],
+                'crawling_jobs': stats.get('crawling_jobs', 0),
+                'analysis_time': datetime.now().isoformat()
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ 기본 통계 API 오류: {e}")
+        raise HTTPException(status_code=500, detail=f"서버 오류: {str(e)}")

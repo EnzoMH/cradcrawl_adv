@@ -927,6 +927,79 @@ class AIAgenticDataMigrator:
                 if "UNIQUE" in str(e):
                     print(f"⚠️  사용자 이미 존재: {user_data['username']}")
     
+    def add_crawling_tracking_fields(self):
+        """organizations 테이블에 크롤링 추적 필드 추가"""
+        try:
+            print("🔧 크롤링 추적 필드 마이그레이션 시작...")
+            
+            with sqlite3.connect(self.db.db_path) as conn:
+                # 현재 컬럼 확인
+                cursor = conn.execute("PRAGMA table_info(organizations)")
+                existing_columns = [col[1] for col in cursor.fetchall()]
+                
+                migrations_needed = []
+                
+                # ai_crawled 컬럼 확인 및 추가
+                if 'ai_crawled' not in existing_columns:
+                    migrations_needed.append({
+                        'sql': "ALTER TABLE organizations ADD COLUMN ai_crawled BOOLEAN DEFAULT 0",
+                        'desc': "ai_crawled 컬럼 추가"
+                    })
+                
+                # last_crawled_at 컬럼 확인 및 추가
+                if 'last_crawled_at' not in existing_columns:
+                    migrations_needed.append({
+                        'sql': "ALTER TABLE organizations ADD COLUMN last_crawled_at DATETIME",
+                        'desc': "last_crawled_at 컬럼 추가"
+                    })
+                
+                if not migrations_needed:
+                    print("✅ 크롤링 추적 필드가 이미 존재합니다.")
+                    return
+                
+                # 마이그레이션 실행
+                for migration in migrations_needed:
+                    conn.execute(migration['sql'])
+                    print(f"✅ {migration['desc']}")
+                
+                # 인덱스 추가
+                indexes = [
+                    {
+                        'sql': "CREATE INDEX IF NOT EXISTS idx_org_ai_crawled ON organizations(ai_crawled)",
+                        'desc': "ai_crawled 인덱스"
+                    },
+                    {
+                        'sql': "CREATE INDEX IF NOT EXISTS idx_org_last_crawled ON organizations(last_crawled_at)",
+                        'desc': "last_crawled_at 인덱스"
+                    }
+                ]
+                
+                for index in indexes:
+                    conn.execute(index['sql'])
+                    print(f"✅ {index['desc']} 생성")
+                
+                conn.commit()
+                print("🎯 크롤링 추적 필드 마이그레이션 완료!")
+                
+                # 확인 쿼리
+                cursor = conn.execute("""
+                    SELECT COUNT(*) as total,
+                           SUM(CASE WHEN ai_crawled = 1 THEN 1 ELSE 0 END) as crawled,
+                           SUM(CASE WHEN ai_crawled = 0 OR ai_crawled IS NULL THEN 1 ELSE 0 END) as not_crawled
+                    FROM organizations 
+                    WHERE is_active = 1
+                """)
+                
+                stats = cursor.fetchone()
+                print(f"📊 현재 상태:")
+                print(f"  - 전체 조직: {stats[0]:,}개")
+                print(f"  - 크롤링 완료: {stats[1]:,}개")
+                print(f"  - 크롤링 대기: {stats[2]:,}개")
+                
+        except Exception as e:
+            print(f"❌ 마이그레이션 실패: {e}")
+            raise
+    
     def print_final_summary(self):
         """최종 결과 요약"""
         print("\n" + "="*70)
@@ -1049,6 +1122,9 @@ def main():
         
         # 5. 데이터 마이그레이션 실행
         success = migrator.migrate_all_sources(batch_size=1000)
+        
+        # 6. 크롤링 추적 필드 마이그레이션
+        migrator.add_crawling_tracking_fields()
         
         end_time = datetime.now()
         duration = end_time - start_time

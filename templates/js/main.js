@@ -269,7 +269,7 @@ class CRMSystem {
     // ===== 크롤링 관련 =====
     async startCrawling(config) {
         try {
-            const response = await fetch('/api/start-enhanced-crawling', {
+            const response = await fetch('/api/enrichment/start-file-crawling', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(config)
@@ -321,7 +321,7 @@ class CRMSystem {
 
     async checkCrawlingStatus() {
         try {
-            const response = await fetch('/api/progress');
+            const response = await fetch('/api/enrichment/crawling-progress');
             const data = await response.json();
             
             if (data.status && data.status !== 'idle') {
@@ -348,8 +348,8 @@ class CRMSystem {
         
         this.intervals.crawling = setInterval(async () => {
             try {
-                const progress = await fetch('/api/progress').then(r => r.json());
-                const results = await fetch('/api/real-time-results?limit=5').then(r => r.json());
+                const progress = await fetch('/api/enrichment/crawling-progress').then(r => r.json());
+                const results = await fetch('/api/statistics/real-time-results?limit=5').then(r => r.json());
                 
                 if (progress.status === 'completed' || progress.status === 'error') {
                     this.stopCrawlingMonitoring();
