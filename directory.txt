@@ -1,119 +1,119 @@
-# Advanced Crawling 프로젝트 디렉토리 구조
-# 생성일: 2025-06-18
-# 최종 수정: 2025-06-26 15:45 (CRM 시스템 React 리팩토링 완료)
+ Advanced Crawling 프로젝트 디렉토리 구조
+ 생성일: 2025-06-18
+ 최종 수정: 2025-06-26 15:45 (CRM 시스템 React 리팩토링 완료)
 
-## 🏗️ 프로젝트 루트 구조
+ 🏗️ 프로젝트 루트 구조
 advanced_crawling/
-├── 📁 .git/                      # Git 버전 관리
-├── 📄 .gitignore                 # Git 무시 파일 목록
-├── 📄 directory.txt              # 프로젝트 구조 문서 (이 파일)
-├── 📄 README.md                  # 프로젝트 설명서
-├── 📄 project_structure.md       # 프로젝트 구조 상세 문서
-├── 📄 requirements.txt           # Python 패키지 의존성
+├── 📁 .git/                       Git 버전 관리
+├── 📄 .gitignore                  Git 무시 파일 목록
+├── 📄 directory.txt               프로젝트 구조 문서 (이 파일)
+├── 📄 README.md                   프로젝트 설명서
+├── 📄 project_structure.md        프로젝트 구조 상세 문서
+├── 📄 requirements.txt            Python 패키지 의존성
 
-## 🚀 핵심 애플리케이션 파일들
-├── 📄 crm_app.py                 # 🎯 FastAPI CRM 메인 애플리케이션 (32KB, 796줄)
-├── 📄 app.py                     # 🔄 레거시 웹 애플리케이션 (크롤링 중심, 17KB, 431줄)
-├── 📄 crawler_main.py            # 🎯 통합 크롤링 메인 모듈 (UnifiedCrawler)
-├── 📄 additionalplan.py          # 추가 계획 및 기능 개발
-├── 📄 test_crm.py                # 🧪 CRM 시스템 테스트 스크립트
-├── 📄 cleanup_logs.py            # 로그 정리 유틸리티
+ 🚀 핵심 애플리케이션 파일들
+├── 📄 crm_app.py                  🎯 FastAPI CRM 메인 애플리케이션 (32KB, 796줄)
+├── 📄 app.py                      🔄 레거시 웹 애플리케이션 (크롤링 중심, 17KB, 431줄)
+├── 📄 crawler_main.py             🎯 통합 크롤링 메인 모듈 (UnifiedCrawler)
+├── 📄 additionalplan.py           추가 계획 및 기능 개발
+├── 📄 test_crm.py                 🧪 CRM 시스템 테스트 스크립트
+├── 📄 cleanup_logs.py             로그 정리 유틸리티
 
-## 🗄️ 데이터베이스 시스템
-├── 📁 database/                  # 🎯 SQLite CRM 데이터베이스 시스템
-│   ├── 📄 __init__.py           # 패키지 초기화
-│   ├── 📄 database.py           # 🎯 SQLite CRM 메인 모듈 (38KB, 900줄)
-│   ├── 📄 models.py             # 🎯 데이터 모델 정의 (17KB, 474줄)
-│   ├── 📄 migration.py          # 🎯 JSON → DB 마이그레이션 (수정됨, 14KB, 361줄)
-│   ├── 📄 churches_crm.db       # 🎯 SQLite 데이터베이스 파일 (80MB+)
-│   ├── 📄 churches_crm.db-shm   # SQLite 공유 메모리 파일
-│   ├── 📄 churches_crm.db-wal   # SQLite 쓰기 전용 로그 파일
-│   └── 📄 churches_crm_backup.db # 백업 데이터베이스
+ 🗄️ 데이터베이스 시스템
+├── 📁 database/                   🎯 SQLite CRM 데이터베이스 시스템
+│   ├── 📄 __init__.py            패키지 초기화
+│   ├── 📄 database.py            🎯 SQLite CRM 메인 모듈 (38KB, 900줄)
+│   ├── 📄 models.py              🎯 데이터 모델 정의 (17KB, 474줄)
+│   ├── 📄 migration.py           🎯 JSON → DB 마이그레이션 (수정됨, 14KB, 361줄)
+│   ├── 📄 churches_crm.db        🎯 SQLite 데이터베이스 파일 (80MB+)
+│   ├── 📄 churches_crm.db-shm    SQLite 공유 메모리 파일
+│   ├── 📄 churches_crm.db-wal    SQLite 쓰기 전용 로그 파일
+│   └── 📄 churches_crm_backup.db  백업 데이터베이스
 
-## 🔧 서비스 레이어 (NEW!)
-├── 📁 services/                  # 🆕 비즈니스 로직 서비스 레이어
-│   ├── 📄 __init__.py           # 패키지 초기화
-│   ├── 📄 organization_service.py # 🎯 기관 관리 서비스 (고급 검색, 필터링)
-│   └── 📄 contact_enrichment_service.py # 🎯 연락처 보강 서비스 (자동 크롤링)
+ 🔧 서비스 레이어 (NEW!)
+├── 📁 services/                   🆕 비즈니스 로직 서비스 레이어
+│   ├── 📄 __init__.py            패키지 초기화
+│   ├── 📄 organization_service.py  🎯 기관 관리 서비스 (고급 검색, 필터링)
+│   └── 📄 contact_enrichment_service.py  🎯 연락처 보강 서비스 (자동 크롤링)
 
-## 🌐 API 레이어 (NEW!)
-├── 📁 api/                       # 🆕 RESTful API 엔드포인트
-│   ├── 📄 __init__.py           # 패키지 초기화
-│   ├── 📄 organization_api.py   # 🎯 기관 관리 API (CRUD, 검색, 필터링)
-│   └── 📄 enrichment_api.py     # 🎯 연락처 보강 API (단일/일괄/자동 보강)
+ 🌐 API 레이어 (NEW!)
+├── 📁 api/                        🆕 RESTful API 엔드포인트
+│   ├── 📄 __init__.py            패키지 초기화
+│   ├── 📄 organization_api.py    🎯 기관 관리 API (CRUD, 검색, 필터링)
+│   └── 📄 enrichment_api.py      🎯 연락처 보강 API (단일/일괄/자동 보강)
 
-## 🔧 유틸리티 모듈
-├── 📁 utils/                     # 🎯 공통 유틸리티 모듈
-│   ├── 📄 __init__.py           # 패키지 초기화
-│   ├── 📄 settings.py           # 🎯 통합 애플리케이션 설정 (상수, 설정값)
-│   ├── 📄 ai_helpers.py         # AI 도움 기능 (Gemini API)
-│   ├── 📄 converter.py          # 데이터 변환 도구
-│   ├── 📄 crawler_utils.py      # 크롤링 유틸리티
-│   ├── 📄 file_utils.py         # 파일 처리 유틸리티
-│   ├── 📄 logger_utils.py       # 로깅 유틸리티
-│   ├── 📄 naver_map_crawler.py  # 네이버 지도 크롤러
-│   ├── 📄 parser.py             # 데이터 파싱 모듈
-│   ├── 📄 phone_utils.py        # 전화번호 처리 도구
-│   └── 📄 validator.py          # 데이터 검증 도구
+ 🔧 유틸리티 모듈
+├── 📁 utils/                      🎯 공통 유틸리티 모듈
+│   ├── 📄 __init__.py            패키지 초기화
+│   ├── 📄 settings.py            🎯 통합 애플리케이션 설정 (상수, 설정값)
+│   ├── 📄 ai_helpers.py          AI 도움 기능 (Gemini API)
+│   ├── 📄 converter.py           데이터 변환 도구
+│   ├── 📄 crawler_utils.py       크롤링 유틸리티
+│   ├── 📄 file_utils.py          파일 처리 유틸리티
+│   ├── 📄 logger_utils.py        로깅 유틸리티
+│   ├── 📄 naver_map_crawler.py   네이버 지도 크롤러
+│   ├── 📄 parser.py              데이터 파싱 모듈
+│   ├── 📄 phone_utils.py         전화번호 처리 도구
+│   └── 📄 validator.py           데이터 검증 도구
 
-## 💾 데이터베이스 파일들
-├── 📄 churches_crm.db           # 🎯 메인 CRM 데이터베이스 (176KB)
-├── 📄 churches_crm.db-shm       # SQLite 공유 메모리 파일 (32KB)
-└── 📄 churches_crm.db-wal       # SQLite 쓰기 전용 로그 파일
+ 💾 데이터베이스 파일들
+├── 📄 churches_crm.db            🎯 메인 CRM 데이터베이스 (176KB)
+├── 📄 churches_crm.db-shm        SQLite 공유 메모리 파일 (32KB)
+└── 📄 churches_crm.db-wal        SQLite 쓰기 전용 로그 파일
 
-## 📁 데이터 저장소
+ 📁 데이터 저장소
 ├── 📁 data/
-│   ├── 📁 json/                  # JSON 데이터 파일들
-│   │   ├── 📄 merged_church_data_20250618_174032.json  # 🎯 메인 병합 데이터 (28,104개 교회)
-│   │   ├── 📄 parsed_homepages_20250617_192102.json    # 홈페이지 파싱 결과
-│   │   ├── 📄 church_data_converted_20250617_202219.json # 교회 데이터 변환
+│   ├── 📁 json/                   JSON 데이터 파일들
+│   │   ├── 📄 merged_church_data_20250618_174032.json   🎯 메인 병합 데이터 (28,104개 교회)
+│   │   ├── 📄 parsed_homepages_20250617_192102.json     홈페이지 파싱 결과
+│   │   ├── 📄 church_data_converted_20250617_202219.json  교회 데이터 변환
 │   │   └── 📄 (기타 JSON 파일들...)
-│   ├── 📁 excel/                 # Excel 데이터 파일들
-│   └── 📁 csv/                   # CSV 데이터 파일들
+│   ├── 📁 excel/                  Excel 데이터 파일들
+│   └── 📁 csv/                    CSV 데이터 파일들
 
-## 🌐 웹 애플리케이션 템플릿 (React 기반 CRM 시스템)
+ 🌐 웹 애플리케이션 템플릿 (React 기반 CRM 시스템)
 ├── 📁 templates/
-│   ├── 📁 html/                  # 🎯 HTML 템플릿 파일들
-│   │   ├── 📄 index.html        # 🎯 CRM 랜딩 페이지 (정적 + 시스템 상태)
-│   │   ├── 📄 dashboard.html    # 🎯 대시보드 페이지 (React 기반)
-│   │   ├── 📄 organizations.html # 🎯 기관 관리 페이지 (React 기반)
-│   │   ├── 📄 enrichment.html   # 🎯 연락처 보강 페이지 (React 기반)
-│   │   ├── 📄 login.html        # 🎯 로그인 페이지
-│   │   ├── 📄 shared-navigation.html # 🆕 공통 네비게이션 컴포넌트
-│   │   ├── 📄 404.html          # 404 에러 페이지
-│   │   └── 📄 500.html          # 500 에러 페이지
+│   ├── 📁 html/                   🎯 HTML 템플릿 파일들
+│   │   ├── 📄 index.html         🎯 CRM 랜딩 페이지 (정적 + 시스템 상태)
+│   │   ├── 📄 dashboard.html     🎯 대시보드 페이지 (React 기반)
+│   │   ├── 📄 organizations.html  🎯 기관 관리 페이지 (React 기반)
+│   │   ├── 📄 enrichment.html    🎯 연락처 보강 페이지 (React 기반)
+│   │   ├── 📄 login.html         🎯 로그인 페이지
+│   │   ├── 📄 shared-navigation.html  🆕 공통 네비게이션 컴포넌트
+│   │   ├── 📄 404.html           404 에러 페이지
+│   │   └── 📄 500.html           500 에러 페이지
 │   ├── 📁 css/
-│   │   └── 📄 style.css         # 🎯 TailwindCSS 보완 스타일시트 (개선됨)
-│   └── 📁 js/                   # 🎯 JavaScript 모듈 (React + 통합 API)
-│       ├── 📄 utils.js          # 🆕 공통 유틸리티 함수 (포맷팅, 검증, DOM 조작)
-│       ├── 📄 api.js            # 🆕 통합 API 클래스 (모든 API 호출 중앙 관리)
-│       ├── 📄 main.js           # 🔄 CRM 시스템 메인 로직 (단순화됨, 15KB, 568줄)
-│       ├── 📄 ui.js             # 🔄 UI 렌더링 모듈 (기존 유지, 52KB, 1146줄)
-│       ├── 📄 dashboard.js      # 🎯 대시보드 React 컴포넌트 (통합 API 사용)
-│       ├── 📄 organizations.js  # 🎯 기관 관리 React 컴포넌트 (통합 API 사용, 37KB, 1108줄)
-│       └── 📄 enrichment.js     # 🎯 연락처 보강 React 컴포넌트 (통합 API 사용, 16KB, 474줄)
+│   │   └── 📄 style.css          🎯 TailwindCSS 보완 스타일시트 (개선됨)
+│   └── 📁 js/                    🎯 JavaScript 모듈 (React + 통합 API)
+│       ├── 📄 utils.js           🆕 공통 유틸리티 함수 (포맷팅, 검증, DOM 조작)
+│       ├── 📄 api.js             🆕 통합 API 클래스 (모든 API 호출 중앙 관리)
+│       ├── 📄 main.js            🔄 CRM 시스템 메인 로직 (단순화됨, 15KB, 568줄)
+│       ├── 📄 ui.js              🔄 UI 렌더링 모듈 (기존 유지, 52KB, 1146줄)
+│       ├── 📄 dashboard.js       🎯 대시보드 React 컴포넌트 (통합 API 사용)
+│       ├── 📄 organizations.js   🎯 기관 관리 React 컴포넌트 (통합 API 사용, 37KB, 1108줄)
+│       └── 📄 enrichment.js      🎯 연락처 보강 React 컴포넌트 (통합 API 사용, 16KB, 474줄)
 
-## 🧪 테스트 및 실험 파일들
+ 🧪 테스트 및 실험 파일들
 ├── 📁 test/
-│   ├── 📄 data_processor.py     # 🎯 데이터 처리기 (수정됨)
-│   ├── 📄 db_to_excel.py        # DB → Excel 내보내기
-│   ├── 📄 faxextractor.py       # 🎯 팩스 번호 추출기 (통합됨, 8.6KB, 224줄)
-│   ├── 📄 migration_script.py   # 마이그레이션 스크립트
-│   ├── 📄 phoneextractor.py     # 전화번호 추출기 (5.9KB, 160줄)
-│   └── 📄 urlextractor_2.py     # 🎯 URL 추출기 v2 (수정됨, 60KB, 1362줄)
+│   ├── 📄 data_processor.py      🎯 데이터 처리기 (수정됨)
+│   ├── 📄 db_to_excel.py         DB → Excel 내보내기
+│   ├── 📄 faxextractor.py        🎯 팩스 번호 추출기 (통합됨, 8.6KB, 224줄)
+│   ├── 📄 migration_script.py    마이그레이션 스크립트
+│   ├── 📄 phoneextractor.py      전화번호 추출기 (5.9KB, 160줄)
+│   └── 📄 urlextractor_2.py      🎯 URL 추출기 v2 (수정됨, 60KB, 1362줄)
 
-## 🗂️ 레거시 파일들
+ 🗂️ 레거시 파일들
 ├── 📁 legacy/
-│   ├── 📄 data_statistics.py    # 🎯 데이터 통계 분석 (수정됨)
-│   └── 📁 legacy2/              # 추가 레거시 파일들
+│   ├── 📄 data_statistics.py     🎯 데이터 통계 분석 (수정됨)
+│   └── 📁 legacy2/               추가 레거시 파일들
 
-## 📊 로그 디렉토리
-├── 📁 logs/                     # 애플리케이션 로그 파일들
+ 📊 로그 디렉토리
+├── 📁 logs/                      애플리케이션 로그 파일들
 
-## 📄 추가 계획 문서
-└── 📄 SaaS 추가개발 계획안.txt  # SaaS 확장 계획서
+ 📄 추가 계획 문서
+└── 📄 SaaS 추가개발 계획안.txt   SaaS 확장 계획서
 
-## 🎯 현재 상태 (2025-06-26 15:45) - React 리팩토링 완료
+ 🎯 현재 상태 (2025-06-26 15:45) - React 리팩토링 완료
  ✅ 완성된 기능들
 - 🗄️ SQLite CRM 데이터베이스 시스템 완성
 - 🏢 기관/교회 정보 관리 (218,039개 데이터 마이그레이션 완료)
@@ -127,19 +127,19 @@ advanced_crawling/
 - 🔐 사용자 인증 및 권한 관리
 
  🆕 새로운 아키텍처 (React 기반)
-# JavaScript 모듈 구조
+ JavaScript 모듈 구조
 ```
 templates/js/
-├── utils.js          # 공통 유틸리티 (전역)
-├── api.js            # 통합 API 클래스 (전역)
-├── main.js           # CRM 시스템 메인 로직 (단순화)
-├── ui.js             # UI 렌더링 (기존 유지)
-├── dashboard.js      # 대시보드 React 컴포넌트
-├── organizations.js  # 기관 관리 React 컴포넌트
-└── enrichment.js     # 연락처 보강 React 컴포넌트
+├── utils.js           공통 유틸리티 (전역)
+├── api.js             통합 API 클래스 (전역)
+├── main.js            CRM 시스템 메인 로직 (단순화)
+├── ui.js              UI 렌더링 (기존 유지)
+├── dashboard.js       대시보드 React 컴포넌트
+├── organizations.js   기관 관리 React 컴포넌트
+└── enrichment.js      연락처 보강 React 컴포넌트
 ```
 
-# 의존성 로드 순서
+ 의존성 로드 순서
 ```html
 1. utils.js       → 공통 유틸리티 함수
 2. api.js         → 통합 API 클래스
@@ -192,27 +192,27 @@ templates/js/
 - ✅ UnifiedCrawler 통합
 
  🆕 API 엔드포인트
-# 기관 관리 API
+ 기관 관리 API
 - `GET /api/organizations` - 기관 목록 조회 (페이징, 검색, 필터링)
 - `GET /api/organizations/{id}` - 기관 상세 조회
 - `POST /api/organizations` - 새 기관 생성
 - `PUT /api/organizations/{id}` - 기관 정보 수정
 - `DELETE /api/organizations/{id}` - 기관 삭제
 
-# 연락처 보강 API
+ 연락처 보강 API
 - `POST /api/enrichment/single/{id}` - 단일 기관 보강
 - `POST /api/enrichment/batch` - 다중 기관 일괄 보강
 - `POST /api/enrichment/auto` - 자동 보강 시작
 - `GET /api/organizations/enrichment-candidates` - 보강 후보 조회
 
-# 통계 API
+ 통계 API
 - `GET /api/statistics` - 기본 통계
 - `GET /api/stats/summary` - 요약 통계
 - `GET /api/stats/dashboard-data` - 대시보드 차트용 데이터
 
 ---
 
-## 📝 파일 크기 참고사항
+ 📝 파일 크기 참고사항
  큰 파일들
 - churches_crm.db: 80MB+ (database 폴더)
 - churches_crm.db: 176KB (루트 폴더)
@@ -227,28 +227,28 @@ templates/js/
 - parsed_homepages_20250617_192102.json: 홈페이지 파싱 결과 (4MB)
 - church_data_converted_20250617_202219.json: 변환된 교회 데이터 (14MB)
 
-## 🚀 실행 방법
+ 🚀 실행 방법
 ```bash
-# 1. 의존성 설치
+ 1. 의존성 설치
 pip install -r requirements.txt
 
-# 2. 데이터베이스 마이그레이션 (선택사항)
+ 2. 데이터베이스 마이그레이션 (선택사항)
 python database/migration.py
 
-# 3. CRM 애플리케이션 실행 (권장)
+ 3. CRM 애플리케이션 실행 (권장)
 python crm_app.py
 
-# 4. 또는 레거시 애플리케이션 실행
+ 4. 또는 레거시 애플리케이션 실행
 python app.py
 
-# 5. 브라우저에서 접속
+ 5. 브라우저에서 접속
 http://localhost:8000
 
-# 6. API 문서 확인
+ 6. API 문서 확인
 http://localhost:8000/docs
 ```
 
-## 🎉 프로젝트 완성도: 98%
+ 🎉 프로젝트 완성도: 98%
 - ✅ CRM 시스템 완성 (React 기반)
 - ✅ 데이터베이스 구축 완료
 - ✅ 웹 인터페이스 완성 (모듈화된 React 컴포넌트)
