@@ -56,10 +56,21 @@ async def lifespan(app: FastAPI):
     # 데이터베이스 연결 확인
     try:
         db = get_database()
+        logger.info("✅ DB 인스턴스 생성 성공")
+        
         stats = db.get_dashboard_stats()
         logger.info(f"📊 DB 연결 성공 - 총 기관 수: {stats.get('total_organizations', 0)}")
+        
+        # DB 파일 경로 확인
+        import os
+        db_file_path = os.path.join(os.path.dirname(__file__), "database", "churches_crm.db")
+        logger.info(f"📁 DB 파일 경로: {db_file_path}")
+        logger.info(f"📋 DB 파일 존재: {os.path.exists(db_file_path)}")
+        
     except Exception as e:
         logger.error(f"❌ DB 연결 실패: {e}")
+        import traceback
+        logger.error(f"❌ 상세 오류: {traceback.format_exc()}")
         raise
     
     yield
@@ -216,7 +227,7 @@ async def statistics_page(request: Request):
             "request": request,
             "error": "통계 데이터 로드 중 오류가 발생했습니다.",
             "title": "통계 분석"
-        })
+    })
 
 @app.get("/login", response_class=HTMLResponse, tags=["웹 인터페이스"])
 async def login_page(request: Request):

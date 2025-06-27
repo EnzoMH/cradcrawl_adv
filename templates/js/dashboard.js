@@ -14,14 +14,37 @@ function Dashboard() {
     const loadData = async () => {
         try {
             setLoading(true);
-            const [data, candidatesData] = await Promise.all([
-                API.getDashboardData(),
-                API.getEnrichmentCandidates()
-            ]);
+            
+            // 대시보드 기본 데이터 로드
+            console.log('대시보드 기본 데이터 로드 시작...');
+            const data = await API.getDashboardData();
+            console.log('대시보드 기본 데이터 응답:', data);
             setDashboardData(data);
-            setCandidates(candidatesData);
+            
+            // 보강 후보 데이터 로드 (별도 처리)
+            try {
+                const candidatesData = await API.getEnrichmentCandidates();
+                console.log('후보 데이터 응답:', candidatesData);
+                
+                // API 응답 구조 변경에 대응
+                if (candidatesData && candidatesData.status === 'success' && candidatesData.candidates) {
+                    setCandidates(Array.isArray(candidatesData.candidates) ? candidatesData.candidates : []);
+                } else if (Array.isArray(candidatesData)) {
+                    // 기존 형식도 지원 (하위 호환성)
+                    setCandidates(candidatesData);
+                } else {
+                    console.warn('예상하지 못한 후보 데이터 형식:', candidatesData);
+                    setCandidates([]);
+                }
+            } catch (candidatesErr) {
+                console.error('보강 후보 로드 실패:', candidatesErr);
+                setCandidates([]); // 후보 데이터만 실패해도 대시보드는 표시
+            }
+            
         } catch (err) {
+            console.error('대시보드 데이터 로드 실패:', err);
             setError(err.message);
+            setCandidates([]);
         } finally {
             setLoading(false);
         }

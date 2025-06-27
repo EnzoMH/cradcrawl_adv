@@ -10,7 +10,7 @@ function OrganizationsList() {
     const [pagination, setPagination] = useState({});
     const [filters, setFilters] = useState({
         page: 1,
-        per_page: 20,
+        per_page: 50, // 기본값 50개 유지
         search: '',
         category: '',
         status: '',
@@ -26,12 +26,36 @@ function OrganizationsList() {
     const loadOrganizations = useCallback(async () => {
         try {
             setLoading(true);
+            console.log('🔍 기관 목록 로드 시작, 필터:', filters);
+            
             const result = await API.getOrganizations(filters);
-            setOrganizations(result.organizations || []);
-            setPagination(result.pagination || {});
+            console.log('📊 API 응답 받음:', result);
+            console.log('📋 응답 구조:', {
+                status: result.status,
+                organizations_count: result.organizations ? result.organizations.length : 0,
+                pagination: result.pagination,
+                total_count: result.total_count
+            });
+            
+            const organizations = result.organizations || [];
+            const pagination = result.pagination || {};
+            
+            console.log('✅ 상태 업데이트:', {
+                organizations_length: organizations.length,
+                pagination: pagination
+            });
+            
+            setOrganizations(organizations);
+            setPagination(pagination);
+            
+            if (organizations.length === 0) {
+                console.warn('⚠️ 조회된 기관이 없습니다');
+            }
+            
         } catch (error) {
-            console.error('기관 목록 로드 실패:', error);
-            alert('기관 목록을 불러올 수 없습니다.');
+            console.error('❌ 기관 목록 로드 실패:', error);
+            console.error('❌ 오류 상세:', error.message, error.stack);
+            alert('기관 목록을 불러올 수 없습니다: ' + error.message);
         } finally {
             setLoading(false);
         }
@@ -195,7 +219,7 @@ function OrganizationsList() {
 
             {/* 검색 및 필터 */}
             <div className="bg-white rounded-lg shadow p-6 mb-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                             검색
@@ -258,16 +282,38 @@ function OrganizationsList() {
                             <option value="LOW">낮음</option>
                         </select>
                     </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            페이지당 항목 수
+                        </label>
+                        <select
+                            value={filters.per_page}
+                            onChange={(e) => handleFilterChange('per_page', parseInt(e.target.value))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                            <option value={20}>20개</option>
+                            <option value={50}>50개</option>
+                            <option value={100}>100개 (최대)</option>
+                        </select>
+                    </div>
                 </div>
                 
-                {/* 필터 초기화 버튼 */}
-                {(filters.search || filters.category || filters.status || filters.priority) && (
-                    <div className="mt-4 flex justify-end">
+                {/* 필터 초기화 및 통계 */}
+                <div className="mt-4 flex justify-between items-center">
+                    <div className="text-sm text-gray-600">
+                        총 {pagination.total_count || 0}개 기관 중 {organizations.length}개 표시
+                        {pagination.total_pages > 1 && (
+                            <span className="ml-2">
+                                (페이지 {pagination.page || 1}/{pagination.total_pages})
+                            </span>
+                        )}
+                    </div>
+                    {(filters.search || filters.category || filters.status || filters.priority) && (
                         <button
                             onClick={() => {
                                 setFilters({
                                     page: 1,
-                                    per_page: 20,
+                                    per_page: filters.per_page, // 현재 per_page 값 유지
                                     search: '',
                                     category: '',
                                     status: '',
@@ -281,8 +327,8 @@ function OrganizationsList() {
                             <i className="fas fa-times mr-1"></i>
                             필터 초기화
                         </button>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
 
             {/* 기관 목록 테이블 */}
@@ -545,9 +591,9 @@ function OrganizationRow({ organization, selected, onSelect, onEdit, onDelete, e
     );
 }
 
-// 페이지네이션 컴포넌트
+// 향상된 페이지네이션 컴포넌트
 function Pagination({ currentPage, totalPages, onPageChange }) {
-    const pages = [];
+    const [jumpPage, setJumpPage] = useState('');
     const maxVisible = 5;
     
     let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
@@ -557,45 +603,162 @@ function Pagination({ currentPage, totalPages, onPageChange }) {
         startPage = Math.max(1, endPage - maxVisible + 1);
     }
     
+    const pages = [];
     for (let i = startPage; i <= endPage; i++) {
         pages.push(i);
     }
 
+    const handleJumpToPage = (e) => {
+        e.preventDefault();
+        const pageNum = parseInt(jumpPage);
+        if (pageNum >= 1 && pageNum <= totalPages) {
+            onPageChange(pageNum);
+            setJumpPage('');
+        }
+    };
+
+    const getQuickJumpPages = () => {
+        const jumps = [];
+        const step = Math.ceil(totalPages / 10);
+        for (let i = step; i < totalPages; i += step) {
+            if (Math.abs(i - currentPage) > 2) {
+                jumps.push(i);
+            }
+        }
+        return jumps.slice(0, 3);
+    };
+
     return (
-        <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6 mt-6 rounded-b-lg">
-            <div className="flex-1 flex justify-between sm:hidden">
-                <button
-                    onClick={() => onPageChange(currentPage - 1)}
-                    disabled={currentPage <= 1}
-                    className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    이전
-                </button>
-                <button
-                    onClick={() => onPageChange(currentPage + 1)}
-                    disabled={currentPage >= totalPages}
-                    className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    다음
-                </button>
+        <div className="bg-white px-4 py-4 border-t border-gray-200 mt-6 rounded-b-lg">
+            {/* 모바일 버전 */}
+            <div className="flex flex-col sm:hidden space-y-3">
+                <div className="flex justify-between">
+                    <button
+                        onClick={() => onPageChange(currentPage - 1)}
+                        disabled={currentPage <= 1}
+                        className="flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <i className="fas fa-chevron-left mr-2"></i>
+                        이전
+                    </button>
+                    <span className="flex items-center text-sm text-gray-700">
+                        {currentPage} / {totalPages}
+                    </span>
+                    <button
+                        onClick={() => onPageChange(currentPage + 1)}
+                        disabled={currentPage >= totalPages}
+                        className="flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        다음
+                        <i className="fas fa-chevron-right ml-2"></i>
+                    </button>
+                </div>
+                
+                {/* 모바일 빠른 이동 */}
+                <form onSubmit={handleJumpToPage} className="flex justify-center">
+                    <div className="flex items-center space-x-2">
+                        <input
+                            type="number"
+                            min="1"
+                            max={totalPages}
+                            value={jumpPage}
+                            onChange={(e) => setJumpPage(e.target.value)}
+                            placeholder="페이지"
+                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center"
+                        />
+                        <button
+                            type="submit"
+                            className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
+                        >
+                            이동
+                        </button>
+                    </div>
+                </form>
             </div>
             
-            <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                <div>
+            {/* 데스크톱 버전 */}
+            <div className="hidden sm:flex sm:items-center sm:justify-between">
+                <div className="flex items-center space-x-4">
                     <p className="text-sm text-gray-700">
-                        총 <span className="font-medium">{totalPages}</span> 페이지 중{' '}
-                        <span className="font-medium">{currentPage}</span> 페이지
+                        총 <span className="font-medium">{totalPages.toLocaleString()}</span> 페이지 중{' '}
+                        <span className="font-medium">{currentPage.toLocaleString()}</span> 페이지
                     </p>
+                    
+                    {/* 빠른 이동 버튼들 */}
+                    {getQuickJumpPages().length > 0 && (
+                        <div className="flex items-center space-x-1">
+                            <span className="text-xs text-gray-500">빠른 이동:</span>
+                            {getQuickJumpPages().map(page => (
+                                <button
+                                    key={page}
+                                    onClick={() => onPageChange(page)}
+                                    className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors"
+                                >
+                                    {page}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
-                <div>
+                
+                <div className="flex items-center space-x-4">
+                    {/* 페이지 입력 */}
+                    <form onSubmit={handleJumpToPage} className="flex items-center space-x-2">
+                        <input
+                            type="number"
+                            min="1"
+                            max={totalPages}
+                            value={jumpPage}
+                            onChange={(e) => setJumpPage(e.target.value)}
+                            placeholder="페이지 번호"
+                            className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
+                        />
+                        <button
+                            type="submit"
+                            className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 transition-colors"
+                        >
+                            이동
+                        </button>
+                    </form>
+                    
+                    {/* 페이지 네비게이션 */}
                     <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+                        {/* 첫 페이지 */}
+                        <button
+                            onClick={() => onPageChange(1)}
+                            disabled={currentPage <= 1}
+                            className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="첫 페이지"
+                        >
+                            <i className="fas fa-angle-double-left"></i>
+                        </button>
+                        
+                        {/* 이전 페이지 */}
                         <button
                             onClick={() => onPageChange(currentPage - 1)}
                             disabled={currentPage <= 1}
-                            className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="relative inline-flex items-center px-2 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="이전 페이지"
                         >
                             <i className="fas fa-chevron-left"></i>
                         </button>
+                        
+                        {/* 페이지 번호들 */}
+                        {startPage > 1 && (
+                            <>
+                                <button
+                                    onClick={() => onPageChange(1)}
+                                    className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+                                >
+                                    1
+                                </button>
+                                {startPage > 2 && (
+                                    <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                                        ...
+                                    </span>
+                                )}
+                            </>
+                        )}
                         
                         {pages.map(page => (
                             <button
@@ -611,12 +774,40 @@ function Pagination({ currentPage, totalPages, onPageChange }) {
                             </button>
                         ))}
                         
+                        {endPage < totalPages && (
+                            <>
+                                {endPage < totalPages - 1 && (
+                                    <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                                        ...
+                                    </span>
+                                )}
+                                <button
+                                    onClick={() => onPageChange(totalPages)}
+                                    className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+                                >
+                                    {totalPages}
+                                </button>
+                            </>
+                        )}
+                        
+                        {/* 다음 페이지 */}
                         <button
                             onClick={() => onPageChange(currentPage + 1)}
                             disabled={currentPage >= totalPages}
-                            className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="relative inline-flex items-center px-2 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="다음 페이지"
                         >
                             <i className="fas fa-chevron-right"></i>
+                        </button>
+                        
+                        {/* 마지막 페이지 */}
+                        <button
+                            onClick={() => onPageChange(totalPages)}
+                            disabled={currentPage >= totalPages}
+                            className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="마지막 페이지"
+                        >
+                            <i className="fas fa-angle-double-right"></i>
                         </button>
                     </nav>
                 </div>

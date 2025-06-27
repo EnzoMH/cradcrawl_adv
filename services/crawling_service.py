@@ -192,11 +192,11 @@ class CrawlingService:
             )
             
             # 5. 크롤러 인스턴스 생성
-            from crawler_main import UnifiedCrawler
+            from crawler_main import AIEnhancedModularUnifiedCrawler
             api_key = os.getenv('GEMINI_API_KEY') if config.use_ai else None
             progress_callback = self.create_progress_callback(job_id)
             
-            self.extractor_instance = UnifiedCrawler(
+            self.extractor_instance = AIEnhancedModularUnifiedCrawler(
                 api_key=api_key,
                 progress_callback=progress_callback
             )
@@ -271,8 +271,17 @@ class CrawlingService:
             # 백그라운드에서 실행
             def run_db_crawling():
                 try:
-                    results = crawl_ai_enhanced_from_database()
+                    # 새 이벤트 루프 생성 (백그라운드 스레드용)
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    
+                    # async 함수를 올바르게 실행
+                    results = loop.run_until_complete(crawl_ai_enhanced_from_database())
                     self.logger.info(f"✅ DB 기반 크롤링 완료: {len(results)}개 처리")
+                    
+                    # 이벤트 루프 정리
+                    loop.close()
+                    
                 except Exception as e:
                     self.logger.error(f"❌ DB 기반 크롤링 실패: {e}")
             

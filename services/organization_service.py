@@ -31,9 +31,18 @@ class OrganizationService:
     
     def __init__(self):
         """초기화"""
-        self.db = get_database()
-        self.logger = LoggerUtils.setup_logger(name="organization_service", file_logging=False)
-        self.logger.info("🏢 기관 관리 서비스 초기화 완료")
+        try:
+            self.db = get_database()
+            self.logger = LoggerUtils.setup_logger(name="organization_service", file_logging=False)
+            
+            # DB 연결 테스트
+            test_stats = self.db.get_dashboard_stats()
+            self.logger.info(f"🏢 기관 관리 서비스 초기화 완료 - 총 기관 수: {test_stats.get('total_organizations', 0)}")
+            
+        except Exception as e:
+            self.logger = LoggerUtils.setup_logger(name="organization_service", file_logging=False)
+            self.logger.error(f"❌ 기관 관리 서비스 초기화 실패: {e}")
+            raise
     
     def get_organizations_with_missing_contacts(self, limit: int = 100) -> List[Dict[str, Any]]:
         """누락된 연락처 정보가 있는 기관 목록 조회"""
@@ -164,11 +173,16 @@ class OrganizationService:
             # 정렬
             base_query += " ORDER BY updated_at DESC"
             
-            # 페이징을 위한 총 개수 조회
-            count_query = base_query.replace(
-                "SELECT id, name, type, category, homepage, phone, fax, email, address, contact_status, priority, assigned_to, lead_source, last_contact_date, next_follow_up_date, created_at, updated_at, created_by",
-                "SELECT COUNT(*)"
-            ).replace(" ORDER BY updated_at DESC", "")
+            # 페이징을 위한 총 개수 조회 - 간단한 방법으로 수정
+            count_query = """
+            SELECT COUNT(*) 
+            FROM organizations 
+            WHERE is_active = 1
+            """
+            
+            # 동일한 조건들을 count_query에도 적용
+            if conditions:
+                count_query += " AND " + " AND ".join(conditions)
             
             with self.db.get_connection() as conn:
                 # 총 개수 조회
@@ -549,6 +563,131 @@ class OrganizationService:
         except Exception as e:
             self.logger.error(f"❌ 연락처 통계 조회 실패: {e}")
             return {}
+    
+    def get_enrichment_candidates_with_pagination(self, page=1, per_page=50, priority=None):
+        """페이지네이션을 지원하는 보강 후보 조회"""
+        try:
+            with self.db.get_connection() as conn:
+                # WHERE 조건 구성
+                where_conditions = ["is_active = 1"]
+                params = []
+                
+                # 누락된 연락처가 있는 조건
+                where_conditions.append("""(
+                    phone IS NULL OR phone = '' OR
+                    fax IS NULL OR fax = '' OR
+                    email IS NULL OR email = '' OR
+                    homepage IS NULL OR homepage = '' OR
+                    address IS NULL OR address = ''
+                )""")
+                
+                # 우선순위 필터
+                if priority:
+                    where_conditions.append("priority = ?")
+                    params.append(priority)
+                
+                where_clause = " AND ".join(where_conditions)
+                
+                # 전체 개수 조회
+                count_query = f"SELECT COUNT(*) FROM organizations WHERE {where_clause}"
+                cursor = conn.execute(count_query, params)
+                total_count = cursor.fetchone()[0]
+                
+                # 페이지네이션 계산
+                offset = (page - 1) * per_page
+                total_pages = (total_count + per_page - 1) // per_page
+                
+                # 데이터 조회
+                query = f"""
+                    SELECT 
+                        id, name, type, category, priority, assigned_to,
+                        homepage, phone, fax, email, address,
+                        last_contact_date, updated_at,
+                        CASE 
+                            WHEN phone IS NULL OR phone = '' THEN 1 ELSE 0 
+                        END +
+                        CASE 
+                            WHEN fax IS NULL OR fax = '' THEN 1 ELSE 0 
+                        END +
+                        CASE 
+                            WHEN email IS NULL OR email = '' THEN 1 ELSE 0 
+                        END +
+                        CASE 
+                            WHEN homepage IS NULL OR homepage = '' THEN 1 ELSE 0 
+                        END +
+                        CASE 
+                            WHEN address IS NULL OR address = '' THEN 1 ELSE 0 
+                        END as missing_count
+                    FROM organizations 
+                    WHERE {where_clause}
+                    ORDER BY 
+                        CASE 
+                            WHEN priority = 'HIGH' THEN 1
+                            WHEN priority = 'MEDIUM' THEN 2
+                            ELSE 3
+                        END,
+                        missing_count DESC,
+                        updated_at ASC
+                    LIMIT ? OFFSET ?
+                """
+                
+                cursor = conn.execute(query, params + [per_page, offset])
+                rows = cursor.fetchall()
+                
+                # 결과 포맷팅
+                candidates = []
+                for row in rows:
+                    org = dict(row)
+                    
+                    # 누락된 필드 상세 분석
+                    missing_fields = []
+                    if not org['phone'] or org['phone'].strip() == '':
+                        missing_fields.append('phone')
+                    if not org['fax'] or org['fax'].strip() == '':
+                        missing_fields.append('fax')
+                    if not org['email'] or org['email'].strip() == '':
+                        missing_fields.append('email')
+                    if not org['homepage'] or org['homepage'].strip() == '':
+                        missing_fields.append('homepage')
+                    if not org['address'] or org['address'].strip() == '':
+                        missing_fields.append('address')
+                    
+                    org['missing_fields'] = missing_fields
+                    org['enrichment_priority'] = self._calculate_enrichment_priority(org)
+                    candidates.append(org)
+                
+                # 페이지네이션 정보
+                pagination = {
+                    'current_page': page,
+                    'per_page': per_page,
+                    'total_count': total_count,
+                    'total_pages': total_pages,
+                    'has_prev': page > 1,
+                    'has_next': page < total_pages,
+                    'prev_page': page - 1 if page > 1 else None,
+                    'next_page': page + 1 if page < total_pages else None
+                }
+                
+                return {
+                    'candidates': candidates,
+                    'pagination': pagination
+                }
+                
+        except Exception as e:
+            self.logger.error(f"❌ 페이지네이션 보강 후보 조회 실패: {e}")
+            return {
+                'candidates': [],
+                'pagination': {
+                    'current_page': 1,
+                    'per_page': per_page,
+                    'total_count': 0,
+                    'total_pages': 0,
+                    'has_prev': False,
+                    'has_next': False,
+                    'prev_page': None,
+                    'next_page': None
+                }
+            }
 
 # 편의 함수들
 def get_missing_contacts_summary(limit: int = 100) -> List[Dict[str, Any]]:
@@ -565,4 +704,4 @@ def search_organizations_advanced(search_term: str = None, has_missing_contacts:
         has_missing_contacts=has_missing_contacts,
         priority=priority
     )
-    return service.search_organizations(filters, page, per_page) 
+    return service.search_organizations(filters, page, per_page)

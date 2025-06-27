@@ -73,7 +73,10 @@ async def get_organizations(
     - **missing_contacts**: 누락된 연락처가 있는 기관만 조회
     """
     try:
+        logger.info(f"🔍 기관 목록 조회 시작 - page: {page}, per_page: {per_page}")
+        
         org_service = OrganizationService()
+        logger.info("✅ OrganizationService 초기화 성공")
         
         # 검색 필터 생성
         filters = OrganizationSearchFilter(
@@ -84,13 +87,21 @@ async def get_organizations(
             assigned_to=assigned_to,
             has_missing_contacts=missing_contacts
         )
+        logger.info(f"📋 검색 필터: {filters.__dict__}")
         
         # 검색 실행
         result = org_service.search_organizations(filters, page, per_page)
+        logger.info(f"📊 검색 결과: {len(result.get('organizations', []))}개 기관")
+        
+        pagination = result.get("pagination", {})
+        total_count = pagination.get("total_count", 0)
         
         return {
             "status": "success",
-            "data": result
+            "organizations": result.get("organizations", []),
+            "pagination": pagination,
+            "filters_applied": result.get("filters_applied", {}),
+            "total_count": total_count
         }
         
     except Exception as e:
@@ -140,30 +151,7 @@ async def get_organizations_missing_contacts(
         logger.error(f"❌ 누락 연락처 기관 조회 실패: {e}")
         raise HTTPException(status_code=500, detail=f"조회 실패: {str(e)}")
 
-@router.get("/{org_id}", summary="기관 상세 정보 조회")
-async def get_organization_detail(org_id: int = Path(..., description="기관 ID")):
-    """
-    특정 기관의 상세 정보를 조회합니다.
-    
-    - **org_id**: 조회할 기관의 ID
-    """
-    try:
-        org_service = OrganizationService()
-        organization = org_service.get_organization_detail_with_enrichment_info(org_id)
-        
-        if not organization:
-            raise HTTPException(status_code=404, detail="기관을 찾을 수 없습니다.")
-        
-        return {
-            "status": "success",
-            "organization": organization
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ 기관 상세 조회 실패: {e}")
-        raise HTTPException(status_code=500, detail=f"조회 실패: {str(e)}")
+# 이 엔드포인트는 파일 끝으로 이동됨 (/{org_id} 패턴이 다른 경로와 충돌 방지)
 
 @router.put("/{org_id}", summary="기관 정보 수정")
 async def update_organization(
@@ -468,4 +456,84 @@ async def get_contact_completion_statistics():
         
     except Exception as e:
         logger.error(f"❌ 연락처 통계 조회 실패: {e}")
-        raise HTTPException(status_code=500, detail=f"통계 조회 실패: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"통계 조회 실패: {str(e)}")
+
+@router.get("/enrichment-candidates", summary="연락처 보강 후보 기관 목록")
+async def get_enrichment_candidates(
+    limit: int = Query(20, description="최대 조회 수", ge=1, le=500),
+    priority: Optional[str] = Query(None, description="우선순위 필터 (HIGH/MEDIUM/LOW)")
+):
+    """
+    연락처 보강이 필요한 후보 기관 목록을 조회합니다.
+    
+    - **limit**: 최대 조회할 기관 수
+    - **priority**: 우선순위 필터
+    """
+    try:
+        logger.info(f"🔍 보강 후보 조회 시작 - limit: {limit}, priority: {priority}")
+        
+        org_service = OrganizationService()
+        
+        if priority:
+            logger.info(f"📋 우선순위별 후보 조회: {priority}")
+            candidates = org_service.get_enrichment_candidates(priority=priority, limit=limit)
+        else:
+            logger.info("📋 전체 누락 연락처 기관 조회")
+            candidates = org_service.get_organizations_with_missing_contacts(limit=limit)
+        
+        logger.info(f"✅ 후보 조회 완료 - 총 {len(candidates)}개 기관")
+        
+        # 통계 계산
+        total_missing_fields = sum(org.get('missing_count', 0) for org in candidates)
+        field_distribution = {}
+        
+        for org in candidates:
+            for field in org.get('missing_fields', []):
+                field_distribution[field] = field_distribution.get(field, 0) + 1
+        
+        result = {
+            "status": "success",
+            "candidates": candidates,
+            "count": len(candidates),
+            "statistics": {
+                "total_candidates": len(candidates),
+                "total_missing_fields": total_missing_fields,
+                "avg_missing_per_org": total_missing_fields / len(candidates) if candidates else 0,
+                "field_distribution": field_distribution
+            }
+        }
+        
+        logger.info(f"📊 결과 통계 - 총 후보: {len(candidates)}, 누락 필드: {total_missing_fields}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"❌ 보강 후보 조회 실패: {e}")
+        import traceback
+        logger.error(f"❌ 상세 오류: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"조회 실패: {str(e)}")
+
+# /{org_id} 패턴은 마지막에 정의 (다른 경로와의 충돌 방지)
+@router.get("/{org_id}", summary="기관 상세 정보 조회")
+async def get_organization_detail(org_id: int = Path(..., description="기관 ID")):
+    """
+    특정 기관의 상세 정보를 조회합니다.
+    
+    - **org_id**: 조회할 기관의 ID
+    """
+    try:
+        org_service = OrganizationService()
+        organization = org_service.get_organization_detail_with_enrichment_info(org_id)
+        
+        if not organization:
+            raise HTTPException(status_code=404, detail="기관을 찾을 수 없습니다.")
+        
+        return {
+            "status": "success",
+            "organization": organization
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ 기관 상세 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"조회 실패: {str(e)}") 

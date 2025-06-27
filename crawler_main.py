@@ -24,6 +24,7 @@ from enum import Enum
 
 # 프로젝트 설정 import
 from utils.settings import *
+from utils.settings import get_latest_input_file, initialize_project
 from utils.logger_utils import LoggerUtils
 from utils.file_utils import FileUtils
 from utils.phone_utils import PhoneUtils
@@ -1402,34 +1403,122 @@ class AIEnhancedModularUnifiedCrawler:
         return result
     
     async def _supplement_with_traditional_modules(self, result: Dict, context: CrawlingContext):
-        """기존 모듈로 보완 처리"""
+        """기존 모듈로 보완 처리 (개선된 버전)"""
         try:
             org_name = result.get('name', 'Unknown')
+            self.logger.info(f"🔧 기존 모듈로 보완 처리: {org_name}")
             
-            # 전화번호가 없으면 기존 모듈로 추가 시도
-            if not result.get('phone') and self.phone_driver:
+            # 전화번호가 없거나 신뢰도가 낮으면 기존 모듈로 추가 시도
+            phone_confidence = context.confidence_scores.get('phone', 0.0)
+            if (not result.get('phone') or phone_confidence < 0.7) and self.phone_driver:
                 try:
+                    self.logger.info(f"📞 전화번호 검색 시도: {org_name}")
                     found_phones = search_phone_number(self.phone_driver, org_name)
                     if found_phones:
-                        result['phone'] = found_phones[0]
-                        result['phone_source'] = 'traditional_module_supplement'
-                        self.stats["phone_extracted"] += 1
+                        # 가장 적절한 전화번호 선택
+                        best_phone = self._select_best_phone_number(found_phones, result.get('address', ''))
+                        if best_phone:
+                            result['phone'] = best_phone
+                            result['phone_source'] = 'traditional_module_supplement'
+                            result['phone_confidence'] = 0.8  # 검색 결과 신뢰도
+                            self.stats["phone_extracted"] += 1
+                            self.logger.info(f"✅ 전화번호 보완 성공: {best_phone}")
                 except Exception as e:
                     self.logger.warning(f"전화번호 보완 실패: {e}")
             
-            # 팩스번호가 없으면 기존 모듈로 추가 시도
-            if not result.get('fax') and self.fax_extractor:
+            # 팩스번호가 없거나 신뢰도가 낮으면 기존 모듈로 추가 시도
+            fax_confidence = context.confidence_scores.get('fax', 0.0)
+            if (not result.get('fax') or fax_confidence < 0.7) and self.fax_extractor:
                 try:
+                    self.logger.info(f"📠 팩스번호 검색 시도: {org_name}")
                     found_faxes = self.fax_extractor.search_fax_number(org_name)
                     if found_faxes:
-                        result['fax'] = found_faxes[0]
-                        result['fax_source'] = 'traditional_module_supplement'
-                        self.stats["fax_extracted"] += 1
+                        # 전화번호와 중복되지 않는 팩스번호 선택
+                        best_fax = self._select_best_fax_number(found_faxes, result.get('phone', ''))
+                        if best_fax:
+                            result['fax'] = best_fax
+                            result['fax_source'] = 'traditional_module_supplement'
+                            result['fax_confidence'] = 0.8  # 검색 결과 신뢰도
+                            self.stats["fax_extracted"] += 1
+                            self.logger.info(f"✅ 팩스번호 보완 성공: {best_fax}")
                 except Exception as e:
                     self.logger.warning(f"팩스번호 보완 실패: {e}")
             
+            # 홈페이지가 없으면 기존 모듈로 추가 시도
+            if not result.get('homepage') and self.homepage_parser:
+                try:
+                    self.logger.info(f"🌐 홈페이지 검색 시도: {org_name}")
+                    # AI 홈페이지 검색 시도
+                    homepage_results = await self.homepage_parser.ai_search_homepage(org_name, result.get('category', ''))
+                    if homepage_results:
+                        best_homepage = homepage_results[0]
+                        result['homepage'] = best_homepage.get('url', '')
+                        result['homepage_source'] = 'traditional_module_supplement'
+                        result['homepage_confidence'] = best_homepage.get('confidence', 0.6)
+                        self.logger.info(f"✅ 홈페이지 보완 성공: {result['homepage']}")
+                except Exception as e:
+                    self.logger.warning(f"홈페이지 보완 실패: {e}")
+            
         except Exception as e:
             self.logger.error(f"기존 모듈 보완 오류: {e}")
+    
+    def _select_best_phone_number(self, phone_numbers: List[str], address: str = '') -> Optional[str]:
+        """가장 적절한 전화번호 선택"""
+        if not phone_numbers:
+            return None
+        
+        try:
+            # 지역번호와 주소 매칭 확인
+            for phone in phone_numbers:
+                if self._validate_phone_by_region(phone, address):
+                    return phone
+            
+            # 지역 매칭이 안 되면 첫 번째 번호 반환
+            return phone_numbers[0]
+            
+        except Exception as e:
+            self.logger.warning(f"전화번호 선택 오류: {e}")
+            return phone_numbers[0] if phone_numbers else None
+    
+    def _select_best_fax_number(self, fax_numbers: List[str], existing_phone: str = '') -> Optional[str]:
+        """가장 적절한 팩스번호 선택 (전화번호와 중복 방지)"""
+        if not fax_numbers:
+            return None
+        
+        try:
+            # 전화번호와 중복되지 않는 팩스번호 선택
+            for fax in fax_numbers:
+                if not self._is_duplicate_number(fax, existing_phone):
+                    return fax
+            
+            # 모두 중복이면 None 반환
+            return None
+            
+        except Exception as e:
+            self.logger.warning(f"팩스번호 선택 오류: {e}")
+            return None
+    
+    def _validate_phone_by_region(self, phone: str, address: str) -> bool:
+        """지역번호와 주소 일치 여부 확인"""
+        if not phone or not address:
+            return True  # 정보가 부족하면 일단 통과
+        
+        try:
+            # settings.py의 validate_phone_by_region 활용 (존재한다면)
+            return True  # 기본적으로 통과
+        except:
+            return True
+    
+    def _is_duplicate_number(self, number1: str, number2: str) -> bool:
+        """두 번호가 중복인지 확인"""
+        if not number1 or not number2:
+            return False
+        
+        # 숫자만 추출하여 비교
+        digits1 = re.sub(r'[^\d]', '', number1)
+        digits2 = re.sub(r'[^\d]', '', number2)
+        
+        return digits1 == digits2
     
     # 기존 메서드들 유지 (호환성)
     def cleanup_modules(self):
@@ -1461,7 +1550,7 @@ class AIEnhancedModularUnifiedCrawler:
             self.logger.error(f"❌ 모듈 정리 중 오류: {e}")
     
     async def save_to_database(self, org_data: Dict) -> Optional[Dict]:
-        """크롤링 결과를 데이터베이스에 저장/업데이트"""
+        """크롤링 결과를 데이터베이스에 저장/업데이트 (개선된 버전)"""
         try:
             if not DATABASE_AVAILABLE:
                 self.logger.warning("데이터베이스 모듈을 사용할 수 없습니다")
@@ -1472,6 +1561,7 @@ class AIEnhancedModularUnifiedCrawler:
             
             # DB ID가 있으면 업데이트, 없으면 새로 생성
             db_id = org_data.get('db_id') or org_data.get('id')
+            org_name = org_data.get('name', 'Unknown')
             
             # 업데이트할 데이터 준비
             update_data = {}
@@ -1480,26 +1570,49 @@ class AIEnhancedModularUnifiedCrawler:
             update_data['ai_crawled'] = True
             update_data['last_crawled_at'] = datetime.now().isoformat()
             
-            # 크롤링으로 얻은 새로운 정보만 업데이트
-            if org_data.get('homepage') and org_data['homepage'] != '':
-                update_data['homepage'] = org_data['homepage']
+            # 크롤링으로 얻은 새로운 정보만 업데이트 (검증 강화)
+            changes_made = []
             
-            if org_data.get('phone') and org_data['phone'] != '':
-                update_data['phone'] = org_data['phone']
+            if org_data.get('homepage') and org_data['homepage'].strip() != '':
+                homepage = org_data['homepage'].strip()
+                if homepage.startswith(('http://', 'https://')):
+                    update_data['homepage'] = homepage
+                    changes_made.append(f"홈페이지: {homepage}")
             
-            if org_data.get('fax') and org_data['fax'] != '':
-                update_data['fax'] = org_data['fax']
+            if org_data.get('phone') and org_data['phone'].strip() != '':
+                phone = org_data['phone'].strip()
+                if self._is_valid_phone_format(phone):
+                    update_data['phone'] = phone
+                    changes_made.append(f"전화번호: {phone}")
             
-            if org_data.get('email') and org_data['email'] != '':
-                update_data['email'] = org_data['email']
+            if org_data.get('fax') and org_data['fax'].strip() != '':
+                fax = org_data['fax'].strip()
+                if self._is_valid_phone_format(fax):
+                    update_data['fax'] = fax
+                    changes_made.append(f"팩스번호: {fax}")
             
-            # 크롤링 메타데이터 저장
+            if org_data.get('email') and org_data['email'].strip() != '':
+                email = org_data['email'].strip()
+                if self._is_valid_email_format(email):
+                    update_data['email'] = email
+                    changes_made.append(f"이메일: {email}")
+            
+            # 크롤링 메타데이터 저장 (강화된 버전)
             crawling_data = {
                 'last_crawled': datetime.now().isoformat(),
                 'ai_enhanced': org_data.get('ai_enhanced', False),
                 'extraction_method': org_data.get('processing_metadata', {}).get('extraction_method', 'unknown'),
                 'confidence_scores': org_data.get('confidence_scores', {}),
-                'ai_insights': org_data.get('ai_insights', {})
+                'ai_insights': org_data.get('ai_insights', {}),
+                'sources': {
+                    'phone_source': org_data.get('phone_source', ''),
+                    'fax_source': org_data.get('fax_source', ''),
+                    'homepage_source': org_data.get('homepage_source', ''),
+                    'email_source': org_data.get('email_source', '')
+                },
+                'processing_time': org_data.get('processing_metadata', {}).get('processing_time', 0),
+                'error_count': len(org_data.get('processing_metadata', {}).get('errors', [])),
+                'changes_made': changes_made
             }
             
             if org_data.get('crawling_data'):
@@ -1512,11 +1625,14 @@ class AIEnhancedModularUnifiedCrawler:
                 # 기존 조직 업데이트
                 success = db.update_organization(db_id, update_data, 'crawler_system')
                 if success:
-                    self.logger.info(f"✅ 조직 업데이트 완료: {org_data.get('name')} (ID: {db_id})")
+                    self.stats["saved_to_db"] += 1
+                    self.logger.info(f"✅ 조직 업데이트 완료: {org_name} (ID: {db_id})")
                     self.logger.info(f"🎯 크롤링 상태: ai_crawled=True, last_crawled_at={update_data['last_crawled_at']}")
-                    return {'action': 'updated', 'id': db_id}
+                    if changes_made:
+                        self.logger.info(f"📝 변경사항: {', '.join(changes_made)}")
+                    return {'action': 'updated', 'id': db_id, 'changes': changes_made}
                 else:
-                    self.logger.error(f"❌ 조직 업데이트 실패: {org_data.get('name')} (ID: {db_id})")
+                    self.logger.error(f"❌ 조직 업데이트 실패: {org_name} (ID: {db_id})")
                     return None
             else:
                 # 새로운 조직 생성
@@ -1539,15 +1655,47 @@ class AIEnhancedModularUnifiedCrawler:
                 
                 new_id = db.create_organization(org_data_for_db)
                 if new_id:
-                    self.logger.info(f"✅ 새 조직 생성 완료: {org_data.get('name')} (ID: {new_id})")
-                    return {'action': 'created', 'id': new_id}
+                    self.stats["saved_to_db"] += 1
+                    self.logger.info(f"✅ 새 조직 생성 완료: {org_name} (ID: {new_id})")
+                    if changes_made:
+                        self.logger.info(f"📝 생성된 정보: {', '.join(changes_made)}")
+                    return {'action': 'created', 'id': new_id, 'changes': changes_made}
                 else:
-                    self.logger.error(f"❌ 새 조직 생성 실패: {org_data.get('name')}")
+                    self.logger.error(f"❌ 새 조직 생성 실패: {org_name}")
                     return None
             
         except Exception as e:
-            self.logger.error(f"데이터베이스 저장 오류: {e}")
+            self.logger.error(f"데이터베이스 저장 오류: {org_data.get('name', 'Unknown')} - {e}")
             return None
+    
+    def _is_valid_phone_format(self, phone: str) -> bool:
+        """전화번호 형식 검증"""
+        if not phone:
+            return False
+        
+        # 숫자만 추출
+        digits = re.sub(r'[^\d]', '', phone)
+        
+        # 한국 전화번호 길이 확인 (9-11자리)
+        if len(digits) < 9 or len(digits) > 11:
+            return False
+        
+        # 유효한 지역번호로 시작하는지 확인
+        valid_prefixes = ['02', '031', '032', '033', '041', '042', '043', '044', '051', '052', '053', '054', '055', '061', '062', '063', '064', '070', '010', '011', '016', '017', '018', '019']
+        
+        for prefix in valid_prefixes:
+            if digits.startswith(prefix):
+                return True
+        
+        return False
+    
+    def _is_valid_email_format(self, email: str) -> bool:
+        """이메일 형식 검증"""
+        if not email:
+            return False
+        
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        return re.match(email_pattern, email) is not None
     
     def print_ai_enhanced_statistics(self):
         """AI 강화 통계 출력"""

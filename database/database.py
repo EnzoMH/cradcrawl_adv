@@ -883,7 +883,10 @@ def get_database() -> ChurchCRMDatabase:
     """싱글톤 데이터베이스 인스턴스 반환"""
     global _db_instance
     if _db_instance is None:
-        _db_instance = ChurchCRMDatabase()
+        # 절대 경로로 DB 파일 경로 설정
+        import os
+        db_path = os.path.join(os.path.dirname(__file__), "churches_crm.db")
+        _db_instance = ChurchCRMDatabase(db_path=db_path)
     return _db_instance
 
 if __name__ == "__main__":

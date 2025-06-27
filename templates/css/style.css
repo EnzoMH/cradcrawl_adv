@@ -70,6 +70,17 @@
     border-right: 3px solid #3b82f6;
 }
 
+/* TailwindCSS 호환 네비게이션 스타일 */
+.nav-item.active {
+    background: linear-gradient(90deg, #dbeafe 0%, #bfdbfe 100%);
+    border-right: 3px solid #3b82f6;
+    font-weight: 600;
+}
+
+.nav-item:hover {
+    transition: all 0.2s ease-in-out;
+}
+
 /* 프로그레스 바 애니메이션 */
 .progress-animated {
     background: linear-gradient(45deg, 

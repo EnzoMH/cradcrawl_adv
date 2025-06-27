@@ -160,48 +160,81 @@ class HomepageParser:
         return logger
     
     def setup_driver(self):
-        """향상된 Selenium WebDriver 설정"""
+        """ChromeDriver 설정 및 초기화 (개선된 오류 처리)"""
         try:
-            chrome_options = Options()
+            # 기존 드라이버 정리
+            if hasattr(self, 'driver') and self.driver:
+                try:
+                    self.driver.quit()
+                except:
+                    pass
+                self.driver = None
             
-            if self.headless:
-                chrome_options.add_argument('--headless')
+            # Chrome 옵션 설정
+            options = webdriver.ChromeOptions()
             
             # 기본 옵션들
-            chrome_options.add_argument('--no-sandbox')
-            chrome_options.add_argument('--disable-dev-shm-usage')
-            chrome_options.add_argument('--disable-gpu')
-            chrome_options.add_argument('--window-size=1920,1080')
-            chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+            options.add_argument('--no-sandbox')
+            options.add_argument('--disable-dev-shm-usage')
+            options.add_argument('--disable-blink-features=AutomationControlled')
+            options.add_experimental_option("excludeSwitches", ["enable-automation"])
+            options.add_experimental_option('useAutomationExtension', False)
             
-            # JavaScript 실행을 위한 추가 설정
-            chrome_options.add_argument('--enable-javascript')
-            chrome_options.add_argument('--disable-web-security')  # 일부 CORS 이슈 해결
-            chrome_options.add_argument('--allow-running-insecure-content')
+            # 사용자 에이전트 설정
+            options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
             
-            # 성능 개선
-            chrome_options.add_argument('--disable-extensions')
-            chrome_options.add_argument('--disable-plugins')
-            chrome_options.add_argument('--disable-images')  # 이미지 로딩 비활성화로 속도 개선
+            # 헤드리스 모드 설정
+            if self.headless:
+                options.add_argument('--headless')
+                options.add_argument('--disable-gpu')
+                options.add_argument('--window-size=1920,1080')
             
-            # 자동화 탐지 우회
-            chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-            chrome_options.add_experimental_option('useAutomationExtension', False)
-            chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+            # 성능 최적화
+            options.add_argument('--disable-extensions')
+            options.add_argument('--disable-plugins')
+            options.add_argument('--disable-images')  # 이미지 로드 비활성화
+            options.add_argument('--disable-javascript')  # JS 비활성화 (필요시 제거)
             
-            # 드라이버 생성
-            self.driver = webdriver.Chrome(options=chrome_options)
-            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            # Chrome WebDriver 초기화 시도
+            try:
+                self.driver = webdriver.Chrome(options=options)
+                self.logger.info("✅ Chrome WebDriver 초기화 성공")
+            except Exception as chrome_error:
+                self.logger.warning(f"⚠️ Chrome WebDriver 실패: {chrome_error}")
+                
+                # Edge WebDriver 시도
+                try:
+                    from selenium.webdriver import Edge
+                    from selenium.webdriver.edge.options import Options as EdgeOptions
+                    
+                    edge_options = EdgeOptions()
+                    edge_options.add_argument('--no-sandbox')
+                    edge_options.add_argument('--disable-dev-shm-usage')
+                    if self.headless:
+                        edge_options.add_argument('--headless')
+                    
+                    self.driver = Edge(options=edge_options)
+                    self.logger.info("✅ Edge WebDriver 초기화 성공 (Chrome 대안)")
+                except Exception as edge_error:
+                    self.logger.error(f"❌ Edge WebDriver도 실패: {edge_error}")
+                    raise Exception(f"모든 WebDriver 실패 - Chrome: {chrome_error}, Edge: {edge_error}")
             
-            # 타임아웃 설정
-            self.driver.set_page_load_timeout(self.page_timeout)
-            self.driver.implicitly_wait(5)  # 암시적 대기 시간 단축
-            
-            self.logger.info(f"향상된 Chrome 드라이버 설정 완료 (headless: {self.headless})")
-            
+            # WebDriver 설정
+            if self.driver:
+                self.driver.set_page_load_timeout(30)
+                self.driver.implicitly_wait(10)
+                
+                # 자동화 감지 방지
+                self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+                
+                self.logger.info("🚀 WebDriver 설정 완료")
+            else:
+                raise Exception("WebDriver 초기화 실패")
+                
         except Exception as e:
-            self.logger.error(f"드라이버 설정 실패: {e}")
-            raise
+            self.logger.error(f"❌ WebDriver 설정 실패: {e}")
+            self.driver = None
+            raise e
     
     def close_driver(self):
         """드라이버 종료"""
@@ -501,12 +534,14 @@ class HomepageParser:
         return content_results
     
     def extract_page_content(self, url: str) -> Dict[str, Any]:
-        """향상된 페이지 내용 추출"""
+        """
+        향상된 페이지 파싱 (다중 전략 + 동적 콘텐츠 처리)
+        """
         result = {
             "url": url,
-            "status": "success",
             "title": "",
             "text_content": "",
+            "status": "success",
             "contact_info": {
                 "phones": [],
                 "faxes": [],
@@ -516,71 +551,96 @@ class HomepageParser:
             "meta_info": {},
             "parsing_details": {},
             "error": None,
-            "accessible": False
+            "accessible": False,
+            "raw_html": ""  # 원본 HTML 추가
         }
         
         try:
+            # WebDriver 초기화 확인
+            if not self.driver:
+                self.logger.warning("⚠️ WebDriver가 초기화되지 않음. 재초기화 시도...")
+                self.setup_driver()
+                
+                if not self.driver:
+                    result["status"] = "error"
+                    result["error"] = "WebDriver 초기화 실패"
+                    self.logger.error(f"❌ WebDriver 초기화 실패: {url}")
+                    return result
+            
             self.logger.info(f"🌐 향상된 페이지 접속: {url}")
             
             # 1. 페이지 로드
             load_start_time = time.time()
             self.driver.get(url)
             
-            # 2. 동적 콘텐츠 대기 (핵심 개선)
-            dynamic_loading_success = self.wait_for_dynamic_content(url)
-            load_end_time = time.time()
-            
-            # 3. 접근성 확인
-            if self.is_page_accessible():
-                result["accessible"] = True
-                
-                # 4. 기본 정보 추출
-                result["title"] = self.driver.title or ""
-                
-                # 5. 다중 전략으로 콘텐츠 추출
-                content_data = self.extract_content_with_multiple_strategies()
-                result["text_content"] = content_data["final_text"]
-                
-                # 6. 파싱 세부 정보 기록
-                result["parsing_details"] = {
-                    "load_time_seconds": round(load_end_time - load_start_time, 2),
-                    "dynamic_loading_success": dynamic_loading_success,
-                    "content_extraction_method": content_data["method_used"],
-                    "full_text_length": len(content_data["full_text"]),
-                    "main_content_length": len(content_data["main_content"]),
-                    "contact_content_length": len(content_data["contact_content"]),
-                    "final_text_length": len(content_data["final_text"])
-                }
-                
-                # 7. 메타 정보 추출 (BeautifulSoup 사용)
-                if BS4_AVAILABLE:
-                    try:
-                        soup = BeautifulSoup(self.driver.page_source, 'html.parser')
-                        result["meta_info"] = self.extract_meta_info(soup)
-                    except Exception as e:
-                        self.logger.warning(f"메타 정보 추출 실패: {e}")
-                        result["meta_info"] = {}
-                
-                # 8. 연락처 정보 추출 (모든 텍스트에서)
-                all_text_for_contact = " ".join([
-                    content_data["full_text"],
-                    content_data["main_content"],
-                    content_data["contact_content"]
-                ])
-                result["contact_info"] = self.extract_contact_info(all_text_for_contact)
-                
-                # 9. 결과 로깅
-                self.logger.info(f"✅ 향상된 파싱 성공:")
-                self.logger.info(f"  - 로딩 시간: {result['parsing_details']['load_time_seconds']}초")
-                self.logger.info(f"  - 동적 로딩: {dynamic_loading_success}")
-                self.logger.info(f"  - 최종 텍스트: {len(result['text_content'])} chars")
-                self.logger.info(f"  - 연락처: {sum(len(v) for v in result['contact_info'].values())}개")
-                
+            # 2. 동적 콘텐츠 로딩 대기
+            if self.wait_for_dynamic_content(url):
+                self.logger.info("✅ 동적 콘텐츠 로딩 완료")
             else:
-                result["status"] = "inaccessible"
-                result["error"] = "페이지에 접근할 수 없음"
-                self.logger.warning(f"⚠️ 페이지 접근 불가: {url}")
-        
+                self.logger.warning("⚠️ 동적 콘텐츠 로딩 시간 초과")
+            
+            # 3. 페이지 접근 가능성 확인
+            if not self.is_page_accessible():
+                result["status"] = "error"
+                result["error"] = "페이지 접근 불가 (404, 403 등)"
+                result["accessible"] = False
+                self.logger.warning(f"❌ 페이지 접근 불가: {url}")
+                return result
+            
+            result["accessible"] = True
+            
+            # 4. 기본 정보 추출
+            try:
+                result["title"] = self.driver.title.strip()
+                result["raw_html"] = self.driver.page_source
+                self.logger.info(f"📄 페이지 제목: {result['title']}")
+                self.logger.info(f"📊 HTML 크기: {len(result['raw_html']):,} bytes")
+            except Exception as e:
+                self.logger.warning(f"기본 정보 추출 오류: {e}")
+            
+            # 5. 콘텐츠 추출 (다중 전략)
+            content_results = self.extract_content_with_multiple_strategies()
+            result["text_content"] = content_results.get("final_text", "")
+            result["parsing_details"] = {
+                "content_extraction_method": content_results.get("method_used", "unknown"),
+                "full_text_length": len(content_results.get("full_text", "")),
+                "main_content_length": len(content_results.get("main_content", "")),
+                "contact_content_length": len(content_results.get("contact_content", "")),
+                "processing_time": time.time() - load_start_time
+            }
+            
+            # 6. 메타 정보 추출 (BeautifulSoup 사용)
+            if BS4_AVAILABLE and result["raw_html"]:
+                try:
+                    soup = BeautifulSoup(result["raw_html"], 'html.parser')
+                    result["meta_info"] = self.extract_meta_info(soup)
+                except Exception as e:
+                    self.logger.warning(f"메타 정보 추출 오류: {e}")
+            
+            # 7. 연락처 정보 추출
+            if result["text_content"]:
+                try:
+                    result["contact_info"] = self.extract_contact_info(result["text_content"])
+                    contact_count = sum(len(v) for v in result["contact_info"].values())
+                    self.logger.info(f"📞 추출된 연락처: {contact_count}개")
+                    
+                    # 연락처별 개수 로깅
+                    for contact_type, contacts in result["contact_info"].items():
+                        if contacts:
+                            self.logger.info(f"  - {contact_type}: {len(contacts)}개 - {contacts[:3]}")  # 최대 3개만 표시
+                
+                except Exception as e:
+                    self.logger.warning(f"연락처 정보 추출 오류: {e}")
+            
+            # 8. 결과 검증
+            if not result["text_content"] or len(result["text_content"]) < 100:
+                result["status"] = "warning"
+                result["error"] = "추출된 텍스트 콘텐츠가 부족함"
+                self.logger.warning(f"⚠️ 텍스트 콘텐츠 부족: {len(result['text_content'])} chars")
+            
+            load_time = time.time() - load_start_time
+            self.logger.info(f"✅ 페이지 파싱 완료: {url} ({load_time:.2f}초)")
+            
         except TimeoutException:
             result["status"] = "timeout"
             result["error"] = "페이지 로드 시간 초과"
@@ -590,6 +650,14 @@ class HomepageParser:
             result["status"] = "error"
             result["error"] = str(e)
             self.logger.error(f"❌ 파싱 오류: {url} - {e}")
+            
+            # WebDriver 재초기화 시도
+            if "NoneType" in str(e) or "driver" in str(e).lower():
+                self.logger.warning("🔄 WebDriver 관련 오류로 재초기화 시도...")
+                try:
+                    self.setup_driver()
+                except Exception as setup_error:
+                    self.logger.error(f"❌ WebDriver 재초기화 실패: {setup_error}")
         
         return result
     

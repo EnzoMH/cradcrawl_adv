@@ -25,62 +25,181 @@ def setup_driver():
     return driver
 
 def extract_phone_numbers(text):
-    """텍스트에서 전화번호 패턴 추출"""
+    """텍스트에서 전화번호 패턴 추출 (개선된 버전)"""
+    if not text:
+        return []
+    
+    # 강화된 전화번호 패턴들
     phone_patterns = [
+        # 하이픈으로 구분된 패턴
         r'\b0\d{1,2}-\d{3,4}-\d{4}\b',  # 02-1234-5678, 031-123-4567
-        r'\b0\d{1,2}\s\d{3,4}\s\d{4}\b',  # 02 1234 5678
-        r'\b0\d{8,10}\b',  # 0212345678
-        r'\b\d{3}-\d{3,4}-\d{4}\b',  # 051-123-4567
-        r'\b\d{3}\s\d{3,4}\s\d{4}\b',  # 051 123 4567
+        r'\b\d{3}-\d{3,4}-\d{4}\b',     # 051-123-4567
+        
+        # 공백으로 구분된 패턴
+        r'\b0\d{1,2}\s+\d{3,4}\s+\d{4}\b',  # 02 1234 5678
+        r'\b\d{3}\s+\d{3,4}\s+\d{4}\b',     # 051 123 4567
+        
+        # 점으로 구분된 패턴
+        r'\b0\d{1,2}\.\d{3,4}\.\d{4}\b',    # 02.1234.5678
+        r'\b\d{3}\.\d{3,4}\.\d{4}\b',       # 051.123.4567
+        
+        # 괄호가 있는 패턴
+        r'\b\(0\d{1,2}\)\s*\d{3,4}[-\s]\d{4}\b',  # (02) 1234-5678
+        r'\b0\d{1,2}\)\s*\d{3,4}[-\s]\d{4}\b',    # 02) 1234-5678
+        
+        # 숫자만 있는 패턴 (10-11자리)
+        r'\b0\d{9,10}\b',  # 0212345678, 01012345678
+        
+        # Tel, TEL, 전화 키워드가 있는 패턴
+        r'(?:Tel|TEL|전화|연락처|대표번호)[\s:]*(\d{2,3}[-\.\s]*\d{3,4}[-\.\s]*\d{4})',
+        r'(?:Tel|TEL|전화|연락처|대표번호)[\s:]*(\(\d{2,3}\)[\s]*\d{3,4}[-\.\s]*\d{4})',
     ]
     
     found_numbers = []
+    
     for pattern in phone_patterns:
-        matches = re.findall(pattern, text)
-        found_numbers.extend(matches)
+        try:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            for match in matches:
+                if isinstance(match, tuple):
+                    # 그룹이 있는 경우 첫 번째 그룹 사용
+                    number = match[0] if match[0] else ''.join(match)
+                else:
+                    number = match
+                
+                if number and number.strip():
+                    found_numbers.append(number.strip())
+        except Exception as e:
+            print(f"⚠️ 패턴 매칭 오류: {pattern} - {e}")
+            continue
     
     # 중복 제거 및 정리
     cleaned_numbers = []
     for number in found_numbers:
-        # 공백 제거 후 하이픈으로 통일
-        clean_number = re.sub(r'\s+', '-', number.strip())
-        if clean_number not in cleaned_numbers:
-            cleaned_numbers.append(clean_number)
+        try:
+            # 숫자만 추출하여 길이 확인
+            digits_only = re.sub(r'[^\d]', '', number)
+            
+            # 유효한 한국 전화번호 길이 확인 (9-11자리)
+            if len(digits_only) < 9 or len(digits_only) > 11:
+                continue
+            
+            # 잘못된 패턴 제외 (예: 111-1111-1111, 000-0000-0000)
+            if len(set(digits_only)) <= 2:  # 같은 숫자만 반복
+                continue
+            
+            # 형식 정리: 하이픈으로 통일
+            clean_number = format_phone_number(digits_only)
+            
+            if clean_number and clean_number not in cleaned_numbers:
+                cleaned_numbers.append(clean_number)
+                
+        except Exception as e:
+            print(f"⚠️ 전화번호 정리 오류: {number} - {e}")
+            continue
     
     return cleaned_numbers
 
-def search_phone_number(driver, name):
-    """구글에서 전화번호 검색"""
-    search_query = f"{name} 전화번호"
+def format_phone_number(digits):
+    """숫자만 있는 전화번호를 표준 형식으로 포맷팅"""
+    if not digits or not digits.isdigit():
+        return None
+    
+    length = len(digits)
     
     try:
-        # 구글 검색 페이지로 이동
-        driver.get("https://www.google.com")
-        time.sleep(2)
+        if length == 9:
+            # 9자리: 02-XXX-XXXX
+            if digits.startswith('02'):
+                return f"{digits[:2]}-{digits[2:5]}-{digits[5:]}"
+            else:
+                return f"{digits[:3]}-{digits[3:6]}-{digits[6:]}"
         
-        # 검색창 찾기 및 검색어 입력
-        search_box = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.NAME, "q"))
-        )
-        search_box.clear()
-        search_box.send_keys(search_query)
-        search_box.submit()
+        elif length == 10:
+            # 10자리: 0XX-XXX-XXXX 또는 0XX-XXXX-XXXX
+            if digits.startswith('02'):
+                return f"{digits[:2]}-{digits[2:6]}-{digits[6:]}"
+            else:
+                return f"{digits[:3]}-{digits[3:6]}-{digits[6:]}"
         
-        # 검색 결과 대기
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.ID, "search"))
-        )
-        time.sleep(3)
+        elif length == 11:
+            # 11자리: 0XX-XXXX-XXXX (주로 휴대폰)
+            return f"{digits[:3]}-{digits[3:7]}-{digits[7:]}"
         
-        # 페이지 텍스트에서 전화번호 추출
-        page_text = driver.find_element(By.TAG_NAME, "body").text
-        phone_numbers = extract_phone_numbers(page_text)
-        
-        return phone_numbers
-        
-    except (TimeoutException, NoSuchElementException) as e:
-        print(f"검색 실패 - {name}: {str(e)}")
+        else:
+            return None
+            
+    except Exception:
+        return None
+
+def search_phone_number(driver, name):
+    """구글에서 전화번호 검색 (개선된 버전)"""
+    if not name or not name.strip():
+        print(f"❌ 기관명이 비어있음")
         return []
+    
+    # 다양한 검색 쿼리 시도
+    search_queries = [
+        f'"{name}" 전화번호',
+        f'"{name}" 연락처',
+        f'{name} 전화',
+        f'{name} Tel',
+        f'{name} 대표번호'
+    ]
+    
+    all_phone_numbers = []
+    
+    for i, search_query in enumerate(search_queries, 1):
+        try:
+            print(f"📞 전화번호 검색 {i}/{len(search_queries)}: {search_query}")
+            
+            # 구글 검색 페이지로 이동
+            driver.get("https://www.google.com")
+            time.sleep(2)
+            
+            # 검색창 찾기 및 검색어 입력
+            search_box = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.NAME, "q"))
+            )
+            search_box.clear()
+            search_box.send_keys(search_query)
+            search_box.submit()
+            
+            # 검색 결과 대기
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, "search"))
+            )
+            time.sleep(3)
+            
+            # 페이지 텍스트에서 전화번호 추출
+            page_text = driver.find_element(By.TAG_NAME, "body").text
+            phone_numbers = extract_phone_numbers(page_text)
+            
+            if phone_numbers:
+                print(f"✅ 전화번호 발견: {phone_numbers}")
+                all_phone_numbers.extend(phone_numbers)
+                # 첫 번째 성공한 검색에서 결과가 있으면 중단
+                break
+            else:
+                print(f"❌ 전화번호 없음: {search_query}")
+            
+            # 다음 검색 전 잠시 대기
+            time.sleep(2)
+            
+        except (TimeoutException, NoSuchElementException) as e:
+            print(f"❌ 검색 실패 - {search_query}: {str(e)}")
+            continue
+        except Exception as e:
+            print(f"❌ 예상치 못한 오류 - {search_query}: {str(e)}")
+            continue
+    
+    # 중복 제거 및 정리
+    unique_phones = []
+    for phone in all_phone_numbers:
+        if phone not in unique_phones and len(phone.replace('-', '').replace(' ', '')) >= 9:
+            unique_phones.append(phone)
+    
+    return unique_phones[:3]  # 최대 3개만 반환
 
 def update_phone_data():
     """JSON 파일에서 전화번호 업데이트"""

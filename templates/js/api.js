@@ -59,7 +59,15 @@ class API {
     }
 
     static async getDashboardData() {
-        return this.get('/api/statistics/basic-stats');
+        try {
+            console.log('대시보드 데이터 API 호출 시작: /api/statistics/basic-stats');
+            const response = await this.get('/api/statistics/basic-stats');
+            console.log('대시보드 데이터 API 응답:', response);
+            return response;
+        } catch (error) {
+            console.error('대시보드 데이터 API 호출 실패:', error);
+            throw error;
+        }
     }
 
     static async getRealTimeResults(limit = 5) {
@@ -68,7 +76,15 @@ class API {
 
     // ===== 기관 관리 API =====
     static async getOrganizations(params = {}) {
-        return this.get('/api/organizations', params);
+        try {
+            console.log('🌐 API.getOrganizations 호출, 파라미터:', params);
+            const result = await this.get('/api/organizations', params);
+            console.log('🌐 API.getOrganizations 응답:', result);
+            return result;
+        } catch (error) {
+            console.error('🌐 API.getOrganizations 실패:', error);
+            throw error;
+        }
     }
 
     static async getOrganization(id) {
@@ -93,25 +109,60 @@ class API {
 
     // ===== 연락처 보강 API =====
     static async getEnrichmentCandidates(params = {}) {
-        // 기본 파라미터 설정
-        const defaultParams = {
-            limit: 20
-        };
-        
-        const queryParams = { ...defaultParams, ...params };
-        return this.get('/api/organizations/enrichment-candidates', queryParams);
+        try {
+            // 기본 파라미터 설정 (페이지네이션 지원)
+            const defaultParams = {
+                page: 1,
+                per_page: 50  // 기본값을 50개로 설정
+            };
+            
+            const queryParams = { ...defaultParams, ...params };
+            console.log('🌐 보강 후보 요청 파라미터:', queryParams);
+            
+            const response = await this.get('/api/enrichment/missing-contacts', queryParams);
+            console.log('🌐 보강 후보 API 응답:', response);
+            
+            return response;
+        } catch (error) {
+            console.error('🌐 보강 후보 API 호출 실패:', error);
+            // 기본 구조 반환
+            return {
+                status: 'error',
+                candidates: [],
+                count: 0,
+                pagination: {
+                    current_page: 1,
+                    per_page: 50,
+                    total_count: 0,
+                    total_pages: 0,
+                    has_prev: false,
+                    has_next: false
+                },
+                statistics: {
+                    total_candidates: 0,
+                    total_missing_fields: 0,
+                    avg_missing_fields: 0
+                },
+                message: error.message || '보강 후보 조회 실패'
+            };
+        }
     }
 
     static async enrichSingle(orgId) {
-        return this.post(`/api/enrichment/single/${orgId}`);
+        return this.post(`/api/enrichment/enrich-single/${orgId}`);
     }
 
     static async enrichBatch(orgIds) {
-        return this.post('/api/enrichment/batch', orgIds);
+        return this.post('/api/enrichment/enrich-multiple', { 
+            org_ids: orgIds,
+            priority: "MEDIUM",
+            requested_by: "WEB_USER",
+            max_concurrent: 3
+        });
     }
 
     static async startAutoEnrichment(limit = 100) {
-        // GET 파라미터로 전달하도록 수정
+        // POST 요청으로 변경하고 쿼리 파라미터 사용
         return this.post(`/api/enrichment/auto?limit=${limit}`);
     }
 

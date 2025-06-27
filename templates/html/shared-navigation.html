@@ -64,7 +64,17 @@
         navItems.forEach(item => {
             const page = item.getAttribute('data-page');
             if (currentPath.includes(page)) {
-                item.classList.add('active', 'bg-blue-50', 'text-blue-600', 'border-r-2', 'border-blue-500');
+                item.classList.add('active');
+                // 페이지별 색상 적용
+                if (page === 'dashboard') {
+                    item.classList.add('bg-blue-50', 'text-blue-600');
+                } else if (page === 'organizations') {
+                    item.classList.add('bg-green-50', 'text-green-600');
+                } else if (page === 'enrichment') {
+                    item.classList.add('bg-purple-50', 'text-purple-600');
+                } else if (page === 'statistics') {
+                    item.classList.add('bg-orange-50', 'text-orange-600');
+                }
             }
         });
     });

@@ -13,7 +13,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
 
 from database.database import get_database
-from crawler_main import ModularUnifiedCrawler
+from crawler_main import AIEnhancedModularUnifiedCrawler
 from utils.logger_utils import LoggerUtils
 
 @dataclass
@@ -60,7 +60,7 @@ class ContactEnrichmentService:
         
         self.logger.info("🔍 연락처 보강 서비스 초기화 완료")
     
-    def get_crawler(self) -> ModularUnifiedCrawler:
+    def get_crawler(self) -> AIEnhancedModularUnifiedCrawler:
         """크롤러 인스턴스 가져오기 (개선된 버전)"""
         if not self.crawler:
             try:
@@ -73,12 +73,12 @@ class ContactEnrichmentService:
                     except Exception as e:
                         self.logger.debug(f"콜백 오류: {e}")
                 
-                # ModularUnifiedCrawler 초기화 (콜백 포함)
-                self.crawler = ModularUnifiedCrawler(progress_callback=progress_callback)
-                self.logger.info("🤖 ModularUnifiedCrawler 초기화 성공 (콜백 포함)")
+                # AIEnhancedModularUnifiedCrawler 초기화 (콜백 포함)
+                self.crawler = AIEnhancedModularUnifiedCrawler(progress_callback=progress_callback)
+                self.logger.info("🤖 AIEnhancedModularUnifiedCrawler 초기화 성공 (콜백 포함)")
                 
             except Exception as e:
-                self.logger.error(f"❌ ModularUnifiedCrawler 초기화 실패: {e}")
+                self.logger.error(f"❌ AIEnhancedModularUnifiedCrawler 초기화 실패: {e}")
                 raise
         
         return self.crawler
@@ -284,7 +284,7 @@ class ContactEnrichmentService:
             # 크롤링 메타데이터 추가
             crawling_metadata = {
                 "last_enrichment": datetime.now().isoformat(),
-                "enrichment_source": "ModularUnifiedCrawler",
+                "enrichment_source": "AIEnhancedModularUnifiedCrawler",
                 "found_fields": list(contact_data.keys())
             }
             

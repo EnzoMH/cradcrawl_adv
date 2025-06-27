@@ -16,28 +16,65 @@ function EnrichmentApp() {
         inProgress: 0,
         failed: 0
     });
+    const [pagination, setPagination] = useState({
+        current_page: 1,
+        per_page: 50,
+        total_count: 0,
+        total_pages: 0,
+        has_prev: false,
+        has_next: false
+    });
+    const [currentPage, setCurrentPage] = useState(1);
+    const [perPage, setPerPage] = useState(50);
 
     // 보강 후보 로드
-    const loadCandidates = useCallback(async () => {
+    const loadCandidates = useCallback(async (page = currentPage, pageSize = perPage) => {
         try {
             setLoading(true);
-            const result = await API.getEnrichmentCandidates();
+            console.log('🔍 보강 후보 로드 시작', { page, pageSize });
             
-            // API 응답 구조 변경에 대응
-            if (result.status === 'success' && result.candidates) {
-                setCandidates(Array.isArray(result.candidates) ? result.candidates : []);
+            const result = await API.getEnrichmentCandidates({ page, per_page: pageSize });
+            console.log('📊 보강 후보 API 응답:', result);
+            
+            // API 응답 구조 확인 및 처리
+            let candidates = [];
+            let paginationData = {};
+            
+            if (result.status === 'success') {
+                if (result.candidates && Array.isArray(result.candidates)) {
+                    candidates = result.candidates;
+                    paginationData = result.pagination || {};
+                } else if (result.organizations && Array.isArray(result.organizations)) {
+                    // 하위 호환성 지원
+                    candidates = result.organizations;
+                    paginationData = result.pagination || {};
+                } else {
+                    console.warn('⚠️ API 응답에 candidates 또는 organizations 배열이 없습니다');
+                }
             } else {
                 // 기존 형식도 지원 (하위 호환성)
-                setCandidates(Array.isArray(result) ? result : []);
+                if (Array.isArray(result)) {
+                    candidates = result;
+                }
             }
+            
+            console.log('✅ 보강 후보 로드 완료:', candidates.length, '개');
+            console.log('📊 페이지네이션 정보:', paginationData);
+            
+            setCandidates(candidates);
+            setPagination(paginationData);
+            setCurrentPage(page);
+            setPerPage(pageSize);
+            
         } catch (error) {
-            console.error('보강 후보 로드 실패:', error);
-            alert('보강 후보를 불러올 수 없습니다.');
+            console.error('❌ 보강 후보 로드 실패:', error);
+            console.error('❌ 오류 상세:', error.message, error.stack);
+            alert('보강 후보를 불러올 수 없습니다: ' + error.message);
             setCandidates([]);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [currentPage, perPage]);
 
     useEffect(() => {
         loadCandidates();
@@ -188,6 +225,19 @@ function EnrichmentApp() {
             setIsEnriching(false);
         }
     };
+
+    // 페이지 변경 핸들러
+    const handlePageChange = useCallback((newPage) => {
+        if (newPage >= 1 && newPage <= pagination.total_pages) {
+            loadCandidates(newPage, perPage);
+        }
+    }, [loadCandidates, pagination.total_pages, perPage]);
+
+    // 페이지당 항목 수 변경 핸들러
+    const handlePerPageChange = useCallback((newPerPage) => {
+        setPerPage(newPerPage);
+        loadCandidates(1, newPerPage); // 첫 페이지로 이동
+    }, [loadCandidates]);
 
     if (loading) {
         return (
@@ -348,6 +398,109 @@ function EnrichmentApp() {
                         </table>
                     </div>
                 )}
+                
+                {/* 페이지네이션 */}
+                {pagination.total_pages > 1 && (
+                    <div className="bg-white px-4 py-3 border-t border-gray-200 sm:px-6">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center">
+                                <p className="text-sm text-gray-700">
+                                    <span className="font-medium">{((pagination.current_page - 1) * pagination.per_page) + 1}</span>
+                                    -
+                                    <span className="font-medium">
+                                        {Math.min(pagination.current_page * pagination.per_page, pagination.total_count)}
+                                    </span>
+                                    개 (전체 <span className="font-medium">{pagination.total_count}</span>개)
+                                </p>
+                                <div className="ml-4">
+                                    <select
+                                        value={perPage}
+                                        onChange={(e) => handlePerPageChange(parseInt(e.target.value))}
+                                        className="border border-gray-300 rounded px-2 py-1 text-sm"
+                                    >
+                                        <option value={20}>20개씩</option>
+                                        <option value={50}>50개씩</option>
+                                        <option value={100}>100개씩</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div className="flex items-center space-x-2">
+                                {/* 첫 페이지 */}
+                                <button
+                                    onClick={() => handlePageChange(1)}
+                                    disabled={!pagination.has_prev}
+                                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <i className="fas fa-angle-double-left"></i>
+                                </button>
+                                
+                                {/* 이전 페이지 */}
+                                <button
+                                    onClick={() => handlePageChange(pagination.current_page - 1)}
+                                    disabled={!pagination.has_prev}
+                                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <i className="fas fa-angle-left"></i>
+                                </button>
+                                
+                                {/* 페이지 번호들 */}
+                                {(() => {
+                                    const pages = [];
+                                    const current = pagination.current_page;
+                                    const total = pagination.total_pages;
+                                    
+                                    let start = Math.max(1, current - 2);
+                                    let end = Math.min(total, current + 2);
+                                    
+                                    if (end - start < 4) {
+                                        if (start === 1) {
+                                            end = Math.min(total, start + 4);
+                                        } else {
+                                            start = Math.max(1, end - 4);
+                                        }
+                                    }
+                                    
+                                    for (let i = start; i <= end; i++) {
+                                        pages.push(
+                                            <button
+                                                key={i}
+                                                onClick={() => handlePageChange(i)}
+                                                className={`px-3 py-1 text-sm border rounded ${
+                                                    i === current
+                                                        ? 'bg-blue-500 text-white border-blue-500'
+                                                        : 'border-gray-300 hover:bg-gray-100'
+                                                }`}
+                                            >
+                                                {i}
+                                            </button>
+                                        );
+                                    }
+                                    
+                                    return pages;
+                                })()}
+                                
+                                {/* 다음 페이지 */}
+                                <button
+                                    onClick={() => handlePageChange(pagination.current_page + 1)}
+                                    disabled={!pagination.has_next}
+                                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <i className="fas fa-angle-right"></i>
+                                </button>
+                                
+                                {/* 마지막 페이지 */}
+                                <button
+                                    onClick={() => handlePageChange(pagination.total_pages)}
+                                    disabled={!pagination.has_next}
+                                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <i className="fas fa-angle-double-right"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -355,13 +508,28 @@ function EnrichmentApp() {
 
 // 보강 후보 행 컴포넌트
 function EnrichmentCandidateRow({ candidate, selected, onSelect, onEnrich, result, disabled }) {
-    const getMissingFieldsBadge = (fields) => {
+    const getMissingFieldsBadge = (candidate) => {
+        // API 응답에서 missing_fields가 있으면 사용, 없으면 직접 계산
+        if (candidate.missing_fields && Array.isArray(candidate.missing_fields)) {
+            return candidate.missing_fields.map(field => {
+                const fieldNames = {
+                    'phone': '전화번호',
+                    'fax': '팩스',
+                    'email': '이메일',
+                    'homepage': '홈페이지',
+                    'address': '주소'
+                };
+                return fieldNames[field] || field;
+            });
+        }
+        
+        // 직접 계산
         const missing = [];
-        if (!candidate.phone) missing.push('전화번호');
-        if (!candidate.fax) missing.push('팩스');
-        if (!candidate.email) missing.push('이메일');
-        if (!candidate.homepage) missing.push('홈페이지');
-        if (!candidate.address) missing.push('주소');
+        if (!candidate.phone || candidate.phone.trim() === '') missing.push('전화번호');
+        if (!candidate.fax || candidate.fax.trim() === '') missing.push('팩스');
+        if (!candidate.email || candidate.email.trim() === '') missing.push('이메일');
+        if (!candidate.homepage || candidate.homepage.trim() === '') missing.push('홈페이지');
+        if (!candidate.address || candidate.address.trim() === '') missing.push('주소');
         return missing;
     };
 
@@ -388,7 +556,7 @@ function EnrichmentCandidateRow({ candidate, selected, onSelect, onEnrich, resul
         }
     };
 
-    const missingFields = getMissingFieldsBadge();
+    const missingFields = getMissingFieldsBadge(candidate);
 
     return (
         <tr className="hover:bg-gray-50 transition-colors">
