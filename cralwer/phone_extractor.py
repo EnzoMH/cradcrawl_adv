@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import json
 import re
 import time
@@ -70,7 +73,7 @@ def extract_phone_numbers(text):
                 if number and number.strip():
                     found_numbers.append(number.strip())
         except Exception as e:
-            print(f"⚠️ 패턴 매칭 오류: {pattern} - {e}")
+            print(f"⚠️ 패턴 매칭 오류: {pattern} - {str(e)}")
             continue
     
     # 중복 제거 및 정리
@@ -92,10 +95,10 @@ def extract_phone_numbers(text):
             clean_number = format_phone_number(digits_only)
             
             if clean_number and clean_number not in cleaned_numbers:
-            cleaned_numbers.append(clean_number)
+                cleaned_numbers.append(clean_number)
                 
         except Exception as e:
-            print(f"⚠️ 전화번호 정리 오류: {number} - {e}")
+            print(f"⚠️ 전화번호 정리 오류: {number} - {str(e)}")
             continue
     
     return cleaned_numbers
@@ -153,28 +156,28 @@ def search_phone_number(driver, name):
         try:
             print(f"📞 전화번호 검색 {i}/{len(search_queries)}: {search_query}")
             
-        # 구글 검색 페이지로 이동
-        driver.get("https://www.google.com")
-        time.sleep(2)
-        
-        # 검색창 찾기 및 검색어 입력
-        search_box = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.NAME, "q"))
-        )
-        search_box.clear()
-        search_box.send_keys(search_query)
-        search_box.submit()
-        
-        # 검색 결과 대기
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.ID, "search"))
-        )
-        time.sleep(3)
-        
-        # 페이지 텍스트에서 전화번호 추출
-        page_text = driver.find_element(By.TAG_NAME, "body").text
-        phone_numbers = extract_phone_numbers(page_text)
-        
+            # 구글 검색 페이지로 이동
+            driver.get("https://www.google.com")
+            time.sleep(2)
+            
+            # 검색창 찾기 및 검색어 입력
+            search_box = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.NAME, "q"))
+            )
+            search_box.clear()
+            search_box.send_keys(search_query)
+            search_box.submit()
+            
+            # 검색 결과 대기
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, "search"))
+            )
+            time.sleep(3)
+            
+            # 페이지 텍스트에서 전화번호 추출
+            page_text = driver.find_element(By.TAG_NAME, "body").text
+            phone_numbers = extract_phone_numbers(page_text)
+            
             if phone_numbers:
                 print(f"✅ 전화번호 발견: {phone_numbers}")
                 all_phone_numbers.extend(phone_numbers)
@@ -185,8 +188,8 @@ def search_phone_number(driver, name):
             
             # 다음 검색 전 잠시 대기
             time.sleep(2)
-        
-    except (TimeoutException, NoSuchElementException) as e:
+            
+        except (TimeoutException, NoSuchElementException) as e:
             print(f"❌ 검색 실패 - {search_query}: {str(e)}")
             continue
         except Exception as e:

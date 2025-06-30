@@ -1358,25 +1358,31 @@ class AIEnhancedModularUnifiedCrawler:
             # 전통적인 모듈로 보완
             await self._supplement_with_traditional_modules(result, context)
             
+            # 여기에 즉시 저장 로직 추가
+            if DATABASE_AVAILABLE:
+                try:
+                    # 데이터베이스에 즉시 저장
+                    saved_result = await self.save_to_database(result)
+                    if saved_result:
+                        self.logger.info(f"✅ 기관 정보 즉시 저장 완료: {org.get('name')}")
+                        
+                        # 콜백 함수가 있다면 진행 상황 즉시 업데이트
+                        if self.progress_callback:
+                            self.progress_callback({
+                                'status': 'COMPLETED',
+                                'name': org.get('name'),
+                                'current_step': 'DB_SAVE',
+                                'processing_time': time.time() - start_time,
+                                **saved_result
+                            })
+                except Exception as e:
+                    self.logger.error(f"❌ 기관 정보 저장 실패: {e}")
+            
             return result
             
         except Exception as e:
-            # error 속성 대신 직접 오류 메시지 로깅
-            error_msg = f"AI 워크플로우 실패: {org_name} - {str(e)}"
-            self.logger.error(f"❌ {error_msg}")
-            
-            # 실패시 기본 처리
-            result = org.copy()
-            result.update({
-                'ai_enhanced': False,
-                'processing_metadata': {
-                    'extraction_method': 'fallback_error',
-                    'error_message': str(e),
-                    'timestamp': datetime.now().isoformat(),
-                    'processing_time': time.time() - start_time
-                }
-            })
-            return result
+            self.logger.error(f"❌ 기관 처리 실패: {e}")
+            return org
     
     def _combine_ai_results(self, original_org: Dict, context: CrawlingContext) -> Dict:
         """AI 결과 조합"""

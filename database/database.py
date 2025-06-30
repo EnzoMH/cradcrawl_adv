@@ -582,7 +582,7 @@ class ChurchCRMDatabase:
     
     def update_organization(self, org_id: int, updates: Dict[str, Any], 
                            updated_by: str) -> bool:
-        """기관 정보 수정"""
+        """기관 정보 수정 - 크롤링 필드 추가"""
         with self.get_connection() as conn:
             # 동적 업데이트 쿼리 생성
             allowed_fields = [
@@ -590,7 +590,9 @@ class ChurchCRMDatabase:
                 'email', 'mobile', 'postal_code', 'address', 'organization_size',
                 'founding_year', 'member_count', 'denomination', 'contact_status',
                 'priority', 'assigned_to', 'estimated_value', 'sales_notes',
-                'internal_notes', 'last_contact_date', 'next_follow_up_date'
+                'internal_notes', 'last_contact_date', 'next_follow_up_date',
+                # 크롤링 관련 필드 추가
+                'ai_crawled', 'last_crawled_at', 'crawling_data'
             ]
             
             set_clauses = []
@@ -875,6 +877,16 @@ class ChurchCRMDatabase:
             ''').fetchone()
             
             return dict(job) if job else None
+
+    def find_organization_by_name(self, org_name: str) -> Optional[int]:
+        """기관명으로 기관 ID 찾기"""
+        with self.get_connection() as conn:
+            cursor = conn.execute('''
+            SELECT id FROM organizations 
+            WHERE name = ? AND is_active = 1
+            ''', (org_name,))
+            result = cursor.fetchone()
+            return result[0] if result else None
 
 # 전역 데이터베이스 인스턴스
 _db_instance = None

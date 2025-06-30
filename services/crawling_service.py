@@ -122,10 +122,11 @@ class CrawlingService:
             raise
     
     def create_progress_callback(self, job_id: int) -> Callable:
-        """진행 상황 콜백 함수 생성"""
+        """진행 상황 콜백 함수 생성 - 실시간 DB 업데이트"""
         def progress_callback(result: dict):
-            """크롤링 진행 상황 콜백"""
+            """크롤링 진행 상황 콜백 - 실시간 반영"""
             try:
+                # 1. crawling_results 테이블에 결과 저장
                 result_data = {
                     'job_id': job_id,
                     'organization_name': result.get('name', ''),
@@ -151,8 +152,65 @@ class CrawlingService:
                 
                 self.db.add_crawling_result(result_data)
                 
-                # 완료된 경우 진행률 업데이트
+                # 2. COMPLETED 상태일 때 organizations 테이블 실시간 업데이트
                 if result.get('status') == 'COMPLETED':
+                    # 기관명으로 organizations 테이블에서 해당 기관 찾기
+                    org_id = self.db.find_organization_by_name(result.get('name', ''))
+                    
+                    if org_id:
+                        # organizations 테이블 업데이트
+                        update_data = {
+                            'homepage': result.get('homepage_url', ''),
+                            'phone': result.get('phone', ''),
+                            'fax': result.get('fax', ''),
+                            'email': result.get('email', ''),
+                            'mobile': result.get('mobile', ''),
+                            'address': result.get('address', ''),
+                            'ai_crawled': True,
+                            'last_crawled_at': datetime.now().isoformat(),
+                            'crawling_data': json.dumps({
+                                'homepage_parsed': result.get('homepage_parsed'),
+                                'ai_summary': result.get('ai_summary'),
+                                'meta_info': result.get('meta_info'),
+                                'contact_info_extracted': result.get('contact_info_extracted')
+                            })
+                        }
+                        
+                        # None이 아닌 값만 업데이트
+                        update_data = {k: v for k, v in update_data.items() if v is not None}
+                        
+                        if update_data:
+                            self.db.update_organization(org_id, update_data, "CRAWLING_SYSTEM")
+                            self.logger.info(f"✅ 기관 실시간 업데이트: {result.get('name')} (ID: {org_id})")
+                    else:
+                        # 기관이 없으면 새로 생성
+                        org_data = {
+                            'name': result.get('name', ''),
+                            'category': result.get('category', ''),
+                            'homepage': result.get('homepage_url', ''),
+                            'phone': result.get('phone', ''),
+                            'fax': result.get('fax', ''),
+                            'email': result.get('email', ''),
+                            'mobile': result.get('mobile', ''),
+                            'address': result.get('address', ''),
+                            'ai_crawled': True,
+                            'crawling_data': json.dumps({
+                                'homepage_parsed': result.get('homepage_parsed'),
+                                'ai_summary': result.get('ai_summary'),
+                                'meta_info': result.get('meta_info'),
+                                'contact_info_extracted': result.get('contact_info_extracted')
+                            }),
+                            'created_by': 'CRAWLING_SYSTEM'
+                        }
+                        
+                        # None이 아닌 값만 포함
+                        org_data = {k: v for k, v in org_data.items() if v is not None}
+                        
+                        if org_data.get('name'):  # 이름이 있는 경우만 생성
+                            new_org_id = self.db.create_organization(org_data)
+                            self.logger.info(f"✅ 새 기관 생성: {result.get('name')} (ID: {new_org_id})")
+                    
+                    # 진행률 업데이트
                     progress = self.db.get_crawling_progress(job_id)
                     completed_count = progress.get('processed_count', 0) + 1
                     self.db.update_crawling_job(job_id, {

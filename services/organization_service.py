@@ -32,8 +32,8 @@ class OrganizationService:
     def __init__(self):
         """초기화"""
         try:
-        self.db = get_database()
-        self.logger = LoggerUtils.setup_logger(name="organization_service", file_logging=False)
+            self.db = get_database()
+            self.logger = LoggerUtils.setup_logger(name="organization_service", file_logging=False)
             
             # DB 연결 테스트
             test_stats = self.db.get_dashboard_stats()
@@ -41,7 +41,7 @@ class OrganizationService:
             
         except Exception as e:
             self.logger = LoggerUtils.setup_logger(name="organization_service", file_logging=False)
-            self.logger.error(f"❌ 기관 관리 서비스 초기화 실패: {e}")
+            self.logger.error(f"❌ 기관 관리 서비스 초기화 실패: {str(e)}")
             raise
     
     def get_organizations_with_missing_contacts(self, limit: int = 100) -> List[Dict[str, Any]]:
@@ -106,7 +106,7 @@ class OrganizationService:
                 return organizations
                 
         except Exception as e:
-            self.logger.error(f"❌ 누락 연락처 기관 조회 실패: {e}")
+            self.logger.error(f"❌ 누락 연락처 기관 조회 실패: {str(e)}")
             return []
     
     def search_organizations(self, filters: OrganizationSearchFilter, 
