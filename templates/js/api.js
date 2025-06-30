@@ -111,12 +111,12 @@ class API {
     static async getEnrichmentCandidates(params = {}) {
         try {
             // 기본 파라미터 설정 (페이지네이션 지원)
-            const defaultParams = {
+        const defaultParams = {
                 page: 1,
                 per_page: 50  // 기본값을 50개로 설정
-            };
-            
-            const queryParams = { ...defaultParams, ...params };
+        };
+        
+        const queryParams = { ...defaultParams, ...params };
             console.log('🌐 보강 후보 요청 파라미터:', queryParams);
             
             const response = await this.get('/api/enrichment/missing-contacts', queryParams);

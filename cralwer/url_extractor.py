@@ -226,11 +226,11 @@ class HomepageParser:
                 
                 # 자동화 감지 방지
                 self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-                
+            
                 self.logger.info("🚀 WebDriver 설정 완료")
             else:
                 raise Exception("WebDriver 초기화 실패")
-                
+            
         except Exception as e:
             self.logger.error(f"❌ WebDriver 설정 실패: {e}")
             self.driver = None
@@ -587,9 +587,9 @@ class HomepageParser:
                 self.logger.warning(f"❌ 페이지 접근 불가: {url}")
                 return result
             
-            result["accessible"] = True
-            
-            # 4. 기본 정보 추출
+                result["accessible"] = True
+                
+                # 4. 기본 정보 추출
             try:
                 result["title"] = self.driver.title.strip()
                 result["raw_html"] = self.driver.page_source
@@ -597,24 +597,24 @@ class HomepageParser:
                 self.logger.info(f"📊 HTML 크기: {len(result['raw_html']):,} bytes")
             except Exception as e:
                 self.logger.warning(f"기본 정보 추출 오류: {e}")
-            
+                
             # 5. 콘텐츠 추출 (다중 전략)
             content_results = self.extract_content_with_multiple_strategies()
             result["text_content"] = content_results.get("final_text", "")
-            result["parsing_details"] = {
+                result["parsing_details"] = {
                 "content_extraction_method": content_results.get("method_used", "unknown"),
                 "full_text_length": len(content_results.get("full_text", "")),
                 "main_content_length": len(content_results.get("main_content", "")),
                 "contact_content_length": len(content_results.get("contact_content", "")),
                 "processing_time": time.time() - load_start_time
-            }
-            
+                }
+                
             # 6. 메타 정보 추출 (BeautifulSoup 사용)
             if BS4_AVAILABLE and result["raw_html"]:
-                try:
+                    try:
                     soup = BeautifulSoup(result["raw_html"], 'html.parser')
-                    result["meta_info"] = self.extract_meta_info(soup)
-                except Exception as e:
+                        result["meta_info"] = self.extract_meta_info(soup)
+                    except Exception as e:
                     self.logger.warning(f"메타 정보 추출 오류: {e}")
             
             # 7. 연락처 정보 추출
@@ -640,7 +640,7 @@ class HomepageParser:
             
             load_time = time.time() - load_start_time
             self.logger.info(f"✅ 페이지 파싱 완료: {url} ({load_time:.2f}초)")
-            
+        
         except TimeoutException:
             result["status"] = "timeout"
             result["error"] = "페이지 로드 시간 초과"

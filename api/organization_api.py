@@ -456,7 +456,7 @@ async def get_contact_completion_statistics():
         
     except Exception as e:
         logger.error(f"❌ 연락처 통계 조회 실패: {e}")
-        raise HTTPException(status_code=500, detail=f"통계 조회 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"통계 조회 실패: {str(e)}") 
 
 @router.get("/enrichment-candidates", summary="연락처 보강 후보 기관 목록")
 async def get_enrichment_candidates(

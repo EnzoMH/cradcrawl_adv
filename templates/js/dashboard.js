@@ -31,7 +31,7 @@ function Dashboard() {
                     setCandidates(Array.isArray(candidatesData.candidates) ? candidatesData.candidates : []);
                 } else if (Array.isArray(candidatesData)) {
                     // 기존 형식도 지원 (하위 호환성)
-                    setCandidates(candidatesData);
+            setCandidates(candidatesData);
                 } else {
                     console.warn('예상하지 못한 후보 데이터 형식:', candidatesData);
                     setCandidates([]);

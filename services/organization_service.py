@@ -32,8 +32,8 @@ class OrganizationService:
     def __init__(self):
         """초기화"""
         try:
-            self.db = get_database()
-            self.logger = LoggerUtils.setup_logger(name="organization_service", file_logging=False)
+        self.db = get_database()
+        self.logger = LoggerUtils.setup_logger(name="organization_service", file_logging=False)
             
             # DB 연결 테스트
             test_stats = self.db.get_dashboard_stats()
@@ -704,4 +704,4 @@ def search_organizations_advanced(search_term: str = None, has_missing_contacts:
         has_missing_contacts=has_missing_contacts,
         priority=priority
     )
-    return service.search_organizations(filters, page, per_page)
+    return service.search_organizations(filters, page, per_page) 
