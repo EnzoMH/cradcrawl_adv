@@ -12,7 +12,6 @@ xlsxwriter
 google-generativeai
 pydantic
 python-dotenv
-# CRM 애플리케이션 추가 의존성
 aiofiles
 python-jose
 passlib
