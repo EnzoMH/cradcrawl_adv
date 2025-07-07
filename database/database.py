@@ -29,9 +29,14 @@ class ChurchCRMDatabase:
     
     def _init_database(self):
         """데이터베이스 초기화"""
-        with self.get_connection() as conn:
-            self._create_schema(conn)
-            self._create_default_admin(conn)
+        try:
+            with self.get_connection() as conn:
+                self._create_schema(conn)
+                self._create_default_admin(conn)
+        except Exception as e:
+            print(f"❌ 데이터베이스 초기화 실패: {e}")
+            # 이미 초기화된 경우 무시
+            pass
     
     @contextmanager
     def get_connection(self):
@@ -44,6 +49,36 @@ class ChurchCRMDatabase:
             raise
         finally:
             conn.close()
+    
+    def execute_query(self, query: str, params: Tuple = None, fetch_all: bool = True) -> List[Dict[str, Any]]:
+        """PostgreSQL 쿼리 실행 (딕셔너리 결과 반환)"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            
+            if params:
+                cursor.execute(query, params)
+            else:
+                cursor.execute(query)
+            
+            if fetch_all:
+                results = cursor.fetchall()
+                return [dict(row) for row in results]
+            else:
+                result = cursor.fetchone()
+                return dict(result) if result else None
+    
+    def execute_update(self, query: str, params: Tuple = None) -> int:
+        """PostgreSQL 업데이트/삽입/삭제 쿼리 실행"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            if params:
+                cursor.execute(query, params)
+            else:
+                cursor.execute(query)
+            
+            conn.commit()
+            return cursor.rowcount
     
     def _create_schema(self, conn):
         """PostgreSQL 스키마 생성"""
