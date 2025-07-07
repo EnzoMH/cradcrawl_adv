@@ -13,6 +13,17 @@ Excel files
 # Log files
 *.log
 
+# Database files
+*.db
+*.sql
+*.sqlite
+*.sqlite3
+
+# Database backup files
+*_backup.sql
+*_backup.db
+crad_db_backup.sql
+
 # Python compiled files
 *.pyc
 
