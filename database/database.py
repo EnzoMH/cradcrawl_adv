@@ -21,9 +21,10 @@ class ChurchCRMDatabase:
     """PostgreSQL 기반 CRM 데이터베이스 클래스"""
     
     def __init__(self, db_url: str = None):
-        self.db_url = db_url or os.getenv("DATABASE_URL")
+        # 로컬 개발 시 DATABASE_URL_LOCAL 사용
+        self.db_url = db_url or os.getenv("DATABASE_URL_LOCAL") or os.getenv("DATABASE_URL")
         if not self.db_url:
-            raise ValueError("DATABASE_URL이 설정되지 않았습니다")
+            raise ValueError("DATABASE_URL 또는 DATABASE_URL_LOCAL이 설정되지 않았습니다")
         self._init_database()
     
     def _init_database(self):
