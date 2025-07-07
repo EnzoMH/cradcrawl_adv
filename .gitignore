@@ -3,6 +3,7 @@ JSON files
 
 Excel files
 *.xlsx
+!childcenter.xlsx
 
 # Environment files
 *.env
