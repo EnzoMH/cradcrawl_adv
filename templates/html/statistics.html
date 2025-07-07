@@ -4,10 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>통계 분석 - CRM 시스템</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    
+    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- 기본 스타일 -->
     <link rel="stylesheet" href="/templates/css/style.css">
+    
+    <!-- 통계 페이지 전용 스타일 -->
+    <link rel="stylesheet" href="/templates/css/stat.css">
+    
+    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Tailwind CSS (보조용) -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -22,68 +39,79 @@
         }
     </script>
 </head>
-<body class="bg-gray-50">
-    <!-- 공통 네비게이션 포함 -->
-    <nav class="bg-white shadow-sm border-b">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16">
-                <!-- 브랜드/홈 링크 -->
-                <div class="flex items-center">
-                    <a href="/" class="flex items-center text-xl font-semibold text-gray-900 hover:text-blue-600">
-                        <i class="fas fa-building mr-2 text-blue-500"></i>
-                        <span class="hidden sm:block">CRM 시스템</span>
-                    </a>
-                    <span class="ml-4 px-2 py-1 bg-orange-100 text-orange-800 text-sm rounded-full">통계 분석</span>
-                </div>
-                
-                <!-- 메인 네비게이션 -->
-                <div class="flex items-center space-x-1">
-                    <a href="/dashboard" 
-                       class="nav-item px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                       data-page="dashboard">
-                        <i class="fas fa-chart-bar mr-1"></i>
-                        <span class="hidden sm:inline">대시보드</span>
-                    </a>
-                    <a href="/organizations" 
-                       class="nav-item px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                       data-page="organizations">
-                        <i class="fas fa-building mr-1"></i>
-                        <span class="hidden sm:inline">기관 관리</span>
-                    </a>
-                    <a href="/enrichment" 
-                       class="nav-item px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                       data-page="enrichment">
-                        <i class="fas fa-magic mr-1"></i>
-                        <span class="hidden sm:inline">연락처 보강</span>
-                    </a>
-                    <a href="/statistics" 
-                       class="nav-item active px-3 py-2 rounded-md text-sm font-medium bg-orange-50 text-orange-600"
-                       data-page="statistics">
-                        <i class="fas fa-chart-pie mr-1"></i>
-                        <span class="hidden sm:inline">통계 분석</span>
-                    </a>
-                </div>
+<body class="bg-light">
+    <!-- 공통 네비게이션 -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm border-bottom">
+        <div class="container-fluid">
+            <!-- 브랜드/홈 링크 -->
+            <a class="navbar-brand d-flex align-items-center" href="/">
+                <i class="fas fa-building me-2 text-primary"></i>
+                <span class="d-none d-sm-block">CRM 시스템</span>
+            </a>
+            <span class="badge bg-warning text-dark ms-3">통계 분석</span>
+            
+            <!-- 토글 버튼 (모바일) -->
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
+            <!-- 메인 네비게이션 -->
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/dashboard">
+                            <i class="fas fa-chart-bar me-1"></i>
+                            <span class="d-none d-sm-inline">대시보드</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/organizations">
+                            <i class="fas fa-building me-1"></i>
+                            <span class="d-none d-sm-inline">기관 관리</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/enrichment">
+                            <i class="fas fa-magic me-1"></i>
+                            <span class="d-none d-sm-inline">연락처 보강</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/statistics">
+                            <i class="fas fa-chart-pie me-1"></i>
+                            <span class="d-none d-sm-inline">통계 분석</span>
+                        </a>
+                    </li>
+                </ul>
                 
                 <!-- 사용자 메뉴 -->
-                <div class="flex items-center space-x-2">
-                    <button class="text-gray-600 hover:text-gray-900 p-2 rounded-md">
-                        <i class="fas fa-bell"></i>
-                    </button>
-                    <div class="relative">
-                        <button class="flex items-center text-gray-600 hover:text-gray-900 p-2 rounded-md">
-                            <i class="fas fa-user-circle mr-1"></i>
-                            <span class="hidden sm:inline">관리자</span>
-                        </button>
-                    </div>
-                </div>
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" role="button">
+                            <i class="fas fa-bell"></i>
+                        </a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-user-circle me-1"></i>
+                            <span class="d-none d-sm-inline">관리자</span>
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="/users">사용자 관리</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="/logout">로그아웃</a></li>
+                        </ul>
+                    </li>
+                </ul>
             </div>
         </div>
     </nav>
 
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- 메인 컨테이너 -->
+    <div class="container-fluid statistics-container">
         <div class="row">
             <!-- 사이드바 -->
-            <div class="col-md-3">
+            <div class="col-lg-3 col-md-4 statistics-sidebar">
                 <div class="card">
                     <div class="card-header">
                         <h5><i class="bi bi-graph-up"></i> 통계 메뉴</h5>
@@ -132,7 +160,7 @@
             </div>
 
             <!-- 메인 콘텐츠 -->
-            <div class="col-md-9">
+            <div class="col-lg-9 col-md-8">
                 <!-- 로딩 표시 -->
                 <div id="loading" class="text-center py-5" style="display: none;">
                     <div class="spinner-border text-primary" role="status">
@@ -150,54 +178,54 @@
 
                     <!-- 요약 카드들 -->
                     <div class="row mb-4">
-                        <div class="col-md-3">
-                            <div class="card bg-primary text-white">
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card stats-card bg-primary text-white">
                                 <div class="card-body">
                                     <div class="d-flex justify-content-between">
                                         <div>
                                             <h6>총 기관 수</h6>
                                             <h3 id="total-orgs">-</h3>
                                         </div>
-                                        <i class="bi bi-building fs-1"></i>
+                                        <i class="bi bi-building"></i>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-3">
-                            <div class="card bg-success text-white">
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card stats-card bg-success text-white">
                                 <div class="card-body">
                                     <div class="d-flex justify-content-between">
                                         <div>
                                             <h6>완전한 연락처</h6>
                                             <h3 id="complete-contacts">-</h3>
                                         </div>
-                                        <i class="bi bi-check-circle fs-1"></i>
+                                        <i class="bi bi-check-circle"></i>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-3">
-                            <div class="card bg-warning text-white">
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card stats-card bg-warning text-white">
                                 <div class="card-body">
                                     <div class="d-flex justify-content-between">
                                         <div>
                                             <h6>불완전한 연락처</h6>
                                             <h3 id="incomplete-contacts">-</h3>
                                         </div>
-                                        <i class="bi bi-exclamation-triangle fs-1"></i>
+                                        <i class="bi bi-exclamation-triangle"></i>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-3">
-                            <div class="card bg-info text-white">
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card stats-card bg-info text-white">
                                 <div class="card-body">
                                     <div class="d-flex justify-content-between">
                                         <div>
                                             <h6>전체 완성도</h6>
                                             <h3 id="completion-rate">-%</h3>
                                         </div>
-                                        <i class="bi bi-percent fs-1"></i>
+                                        <i class="bi bi-percent"></i>
                                     </div>
                                 </div>
                             </div>
@@ -206,23 +234,27 @@
 
                     <!-- 차트 영역 -->
                     <div class="row">
-                        <div class="col-md-6">
+                        <div class="col-md-6 mb-4">
                             <div class="card">
                                 <div class="card-header">
                                     <h5><i class="bi bi-bar-chart"></i> 연락처 보유 현황</h5>
                                 </div>
                                 <div class="card-body">
-                                    <canvas id="contactCoverageChart"></canvas>
+                                    <div class="chart-container">
+                                        <canvas id="contactCoverageChart"></canvas>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-6 mb-4">
                             <div class="card">
                                 <div class="card-header">
                                     <h5><i class="bi bi-pie-chart"></i> 완성도 분포</h5>
                                 </div>
                                 <div class="card-body">
-                                    <canvas id="completenessChart"></canvas>
+                                    <div class="chart-container">
+                                        <canvas id="completenessChart"></canvas>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -534,6 +566,9 @@
         </div>
     </div>
 
+    <!-- Bootstrap JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
     <!-- JavaScript 모듈들 - 의존성 순서대로 로드 -->
     <script src="/templates/js/utils.js"></script>
     <script src="/templates/js/api.js"></script>

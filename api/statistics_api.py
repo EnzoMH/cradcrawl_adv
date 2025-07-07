@@ -133,59 +133,73 @@ class CRMStatisticsAnalyzer:
                 "category_breakdown": {}
             }
             
-            # 기본 통계 조회
-            with self.db.get_connection() as conn:
-                # 전체 기관 수
-                cursor = conn.execute("SELECT COUNT(*) FROM organizations WHERE is_active = 1")
-                total_orgs = cursor.fetchone()[0]
+            # 기본 통계 조회 - PostgreSQL 방식
+            total_orgs_query = "SELECT COUNT(*) FROM organizations WHERE is_active = true"
+            total_orgs_result = self.db.execute_query(total_orgs_query, fetch_all=False)
+            total_orgs = total_orgs_result['count'] if total_orgs_result else 0
+            
+            # 연락처별 보유 현황 - PostgreSQL 방식
+            contact_query = """
+                SELECT 
+                    COUNT(CASE WHEN phone IS NOT NULL AND phone != '' THEN 1 END) as phone_count,
+                    COUNT(CASE WHEN fax IS NOT NULL AND fax != '' THEN 1 END) as fax_count,
+                    COUNT(CASE WHEN email IS NOT NULL AND email != '' THEN 1 END) as email_count,
+                    COUNT(CASE WHEN homepage IS NOT NULL AND homepage != '' THEN 1 END) as homepage_count,
+                    COUNT(CASE WHEN phone IS NOT NULL AND phone != '' 
+                               AND fax IS NOT NULL AND fax != ''
+                               AND email IS NOT NULL AND email != '' THEN 1 END) as complete_count
+                FROM organizations WHERE is_active = true
+            """
+            
+            contact_result = self.db.execute_query(contact_query, fetch_all=False)
+            if contact_result:
+                phone_count = contact_result['phone_count']
+                fax_count = contact_result['fax_count']
+                email_count = contact_result['email_count']
+                homepage_count = contact_result['homepage_count']
+                complete_count = contact_result['complete_count']
+            else:
+                phone_count = fax_count = email_count = homepage_count = complete_count = 0
+            
+            # 카테고리별 분석 - PostgreSQL 방식
+            category_query = """
+                SELECT 
+                    category,
+                    COUNT(*) as total,
+                    COUNT(CASE WHEN phone IS NOT NULL AND phone != '' THEN 1 END) as has_phone,
+                    COUNT(CASE WHEN fax IS NOT NULL AND fax != '' THEN 1 END) as has_fax,
+                    COUNT(CASE WHEN email IS NOT NULL AND email != '' THEN 1 END) as has_email,
+                    COUNT(CASE WHEN homepage IS NOT NULL AND homepage != '' THEN 1 END) as has_homepage
+                FROM organizations 
+                WHERE is_active = true 
+                GROUP BY category
+                ORDER BY total DESC
+            """
+            
+            category_results = self.db.execute_query(category_query)
+            category_stats = {}
+            
+            for row in category_results:
+                category = row['category']
+                total = row['total']
+                has_phone = row['has_phone']
+                has_fax = row['has_fax']
+                has_email = row['has_email']
+                has_homepage = row['has_homepage']
                 
-                # 연락처별 보유 현황
-                cursor = conn.execute("""
-                    SELECT 
-                        COUNT(CASE WHEN phone IS NOT NULL AND phone != '' THEN 1 END) as phone_count,
-                        COUNT(CASE WHEN fax IS NOT NULL AND fax != '' THEN 1 END) as fax_count,
-                        COUNT(CASE WHEN email IS NOT NULL AND email != '' THEN 1 END) as email_count,
-                        COUNT(CASE WHEN homepage IS NOT NULL AND homepage != '' THEN 1 END) as homepage_count,
-                        COUNT(CASE WHEN phone IS NOT NULL AND phone != '' 
-                                   AND fax IS NOT NULL AND fax != ''
-                                   AND email IS NOT NULL AND email != '' THEN 1 END) as complete_count
-                    FROM organizations WHERE is_active = 1
-                """)
-                
-                contact_counts = cursor.fetchone()
-                phone_count, fax_count, email_count, homepage_count, complete_count = contact_counts
-                
-                # 카테고리별 분석
-                cursor = conn.execute("""
-                    SELECT 
-                        category,
-                        COUNT(*) as total,
-                        COUNT(CASE WHEN phone IS NOT NULL AND phone != '' THEN 1 END) as has_phone,
-                        COUNT(CASE WHEN fax IS NOT NULL AND fax != '' THEN 1 END) as has_fax,
-                        COUNT(CASE WHEN email IS NOT NULL AND email != '' THEN 1 END) as has_email,
-                        COUNT(CASE WHEN homepage IS NOT NULL AND homepage != '' THEN 1 END) as has_homepage
-                    FROM organizations 
-                    WHERE is_active = 1 
-                    GROUP BY category
-                    ORDER BY total DESC
-                """)
-                
-                category_stats = {}
-                for row in cursor.fetchall():
-                    category, total, has_phone, has_fax, has_email, has_homepage = row
-                    category_stats[category] = {
-                        "total": total,
-                        "phone_coverage": round((has_phone / total * 100), 1) if total > 0 else 0,
-                        "fax_coverage": round((has_fax / total * 100), 1) if total > 0 else 0,
-                        "email_coverage": round((has_email / total * 100), 1) if total > 0 else 0,
-                        "homepage_coverage": round((has_homepage / total * 100), 1) if total > 0 else 0,
-                        "contact_counts": {
-                            "phone": has_phone,
-                            "fax": has_fax,
-                            "email": has_email,
-                            "homepage": has_homepage
-                        }
+                category_stats[category] = {
+                    "total": total,
+                    "phone_coverage": round((has_phone / total * 100), 1) if total > 0 else 0,
+                    "fax_coverage": round((has_fax / total * 100), 1) if total > 0 else 0,
+                    "email_coverage": round((has_email / total * 100), 1) if total > 0 else 0,
+                    "homepage_coverage": round((has_homepage / total * 100), 1) if total > 0 else 0,
+                    "contact_counts": {
+                        "phone": has_phone,
+                        "fax": has_fax,
+                        "email": has_email,
+                        "homepage": has_homepage
                     }
+                }
             
             # 기본 통계
             stats["basic_stats"] = {
@@ -221,29 +235,37 @@ class CRMStatisticsAnalyzer:
             fax_areas = Counter()
             email_domains = Counter()
             
-            with self.db.get_connection() as conn:
-                # 전화번호 품질 분석
-                cursor = conn.execute("SELECT phone FROM organizations WHERE phone IS NOT NULL AND phone != '' AND is_active = 1")
-                for (phone,) in cursor.fetchall():
-                    validation = self.validate_korean_phone(phone)
-                    if validation["is_valid"]:
-                        valid_phones += 1
-                        phone_areas[validation["area_code"]] += 1
-                
-                # 팩스번호 품질 분석
-                cursor = conn.execute("SELECT fax FROM organizations WHERE fax IS NOT NULL AND fax != '' AND is_active = 1")
-                for (fax,) in cursor.fetchall():
-                    validation = self.validate_korean_phone(fax)
-                    if validation["is_valid"]:
-                        valid_faxes += 1
-                        fax_areas[validation["area_code"]] += 1
-                
-                # 이메일 도메인 분석
-                cursor = conn.execute("SELECT email FROM organizations WHERE email IS NOT NULL AND email != '' AND is_active = 1")
-                for (email,) in cursor.fetchall():
-                    domain = self.extract_email_domain(email)
-                    if domain:
-                        email_domains[domain] += 1
+            # 전화번호 품질 분석
+            phone_query = "SELECT phone FROM organizations WHERE phone IS NOT NULL AND phone != '' AND is_active = true"
+            phone_results = self.db.execute_query(phone_query)
+            
+            for row in phone_results:
+                phone = row['phone']
+                validation = self.validate_korean_phone(phone)
+                if validation["is_valid"]:
+                    valid_phones += 1
+                    phone_areas[validation["area_code"]] += 1
+            
+            # 팩스번호 품질 분석
+            fax_query = "SELECT fax FROM organizations WHERE fax IS NOT NULL AND fax != '' AND is_active = true"
+            fax_results = self.db.execute_query(fax_query)
+            
+            for row in fax_results:
+                fax = row['fax']
+                validation = self.validate_korean_phone(fax)
+                if validation["is_valid"]:
+                    valid_faxes += 1
+                    fax_areas[validation["area_code"]] += 1
+            
+            # 이메일 도메인 분석
+            email_query = "SELECT email FROM organizations WHERE email IS NOT NULL AND email != '' AND is_active = true"
+            email_results = self.db.execute_query(email_query)
+            
+            for row in email_results:
+                email = row['email']
+                domain = self.extract_email_domain(email)
+                if domain:
+                    email_domains[domain] += 1
             
             # 품질 지표
             stats["quality_metrics"] = {
@@ -289,6 +311,8 @@ class CRMStatisticsAnalyzer:
             
         except Exception as e:
             logger.error(f"❌ CRM 연락처 분석 실패: {e}")
+            import traceback
+            logger.error(f"❌ 상세 오류: {traceback.format_exc()}")
             raise
     
     def analyze_enrichment_history(self, days: int = 30) -> Dict[str, Any]:
@@ -298,22 +322,24 @@ class CRMStatisticsAnalyzer:
         try:
             cutoff_date = datetime.now() - timedelta(days=days)
             
-            with self.db.get_connection() as conn:
-                # 보강 활동 분석 (enrichment_history 테이블이 있다고 가정)
-                cursor = conn.execute("""
-                    SELECT 
-                        DATE(updated_at) as date,
-                        COUNT(*) as updated_count
-                    FROM organizations 
-                    WHERE updated_at >= ? AND is_active = 1
-                    GROUP BY DATE(updated_at)
-                    ORDER BY date DESC
-                """, (cutoff_date.isoformat(),))
-                
-                daily_updates = {}
-                for row in cursor.fetchall():
-                    date, count = row
-                    daily_updates[date] = count
+            # PostgreSQL 방식으로 수정
+            history_query = """
+                SELECT 
+                    DATE(updated_at) as date,
+                    COUNT(*) as updated_count
+                FROM organizations 
+                WHERE updated_at >= %s AND is_active = true
+                GROUP BY DATE(updated_at)
+                ORDER BY date DESC
+            """
+            
+            history_results = self.db.execute_query(history_query, (cutoff_date,))
+            daily_updates = {}
+            
+            for row in history_results:
+                date = str(row['date'])
+                count = row['updated_count']
+                daily_updates[date] = count
             
             return {
                 "analysis_period": f"최근 {days}일",
@@ -413,6 +439,7 @@ analyzer = CRMStatisticsAnalyzer()
 async def get_statistics_overview():
     """통계 분석 개요 조회"""
     try:
+        logger.info("📊 통계 개요 조회 시작")
         contact_analysis = analyzer.analyze_contact_data()
         
         return {
@@ -427,6 +454,8 @@ async def get_statistics_overview():
         
     except Exception as e:
         logger.error(f"❌ 통계 개요 조회 실패: {e}")
+        import traceback
+        logger.error(f"❌ 상세 오류: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"통계 개요 조회 실패: {str(e)}")
 
 @router.get("/contact-analysis", summary="연락처 분석")
@@ -623,30 +652,30 @@ async def export_statistics_data(
 
 @router.get("/real-time-results", summary="실시간 결과 조회")
 async def get_real_time_results(limit: int = Query(5, ge=1, le=20, description="최대 조회 수")):
-    """실시간 결과 조회 - 최근 업데이트된 기관들 (crm_app.py에서 이전)"""
+    """실시간 결과 조회 - 최근 업데이트된 기관들"""
     try:
-        # 최근 업데이트된 기관들 조회
-        with get_database().get_connection() as conn:
-            cursor = conn.execute("""
-                SELECT id, name, category, phone, email, updated_at
-                FROM organizations 
-                WHERE is_active = 1 
-                ORDER BY updated_at DESC 
-                LIMIT ?
-            """, (limit,))
-            
-            results = []
-            for row in cursor.fetchall():
-                org_id, name, category, phone, email, updated_at = row
-                results.append({
-                    "id": org_id,
-                    "name": name,
-                    "category": category,
-                    "phone": phone,
-                    "email": email,
-                    "updated_at": updated_at,
-                    "has_complete_contact": bool(phone and email)
-                })
+        # PostgreSQL 방식으로 수정
+        query = """
+            SELECT id, name, category, phone, email, updated_at
+            FROM organizations 
+            WHERE is_active = true 
+            ORDER BY updated_at DESC 
+            LIMIT %s
+        """
+        
+        results_data = get_database().execute_query(query, (limit,))
+        
+        results = []
+        for row in results_data:
+            results.append({
+                "id": row['id'],
+                "name": row['name'],
+                "category": row['category'],
+                "phone": row['phone'],
+                "email": row['email'],
+                "updated_at": row['updated_at'].isoformat() if row['updated_at'] else None,
+                "has_complete_contact": bool(row['phone'] and row['email'])
+            })
         
         return {
             "status": "success",
@@ -659,11 +688,11 @@ async def get_real_time_results(limit: int = Query(5, ge=1, le=20, description="
         logger.error(f"❌ 실시간 결과 조회 실패: {e}")
         raise HTTPException(status_code=500, detail=f"실시간 결과 조회 실패: {str(e)}")
 
-# ==================== 기본 통계 API (app.py에서 이전) ====================
+# ==================== 기본 통계 API ====================
 
 @router.get("/basic-stats", summary="기본 통계 정보")
 async def get_basic_statistics():
-    """간단한 데이터 통계 API - DB 기반 (app.py에서 이전)"""
+    """간단한 데이터 통계 API"""
     try:
         db = get_database()
         stats = db.get_dashboard_stats()

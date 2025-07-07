@@ -100,7 +100,7 @@ class UsersManager {
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div class="flex items-center justify-end space-x-2">
-                        ${this.canManage(user.role) ? `
+                        ${this.canManage(user.role, user.id) ? `
                             <button onclick="usersManager.editUser(${user.id})" class="text-indigo-600 hover:text-indigo-900" title="편집">
                                 <i class="fas fa-edit"></i>
                             </button>
@@ -143,7 +143,13 @@ class UsersManager {
         }
     }
 
-    canManage(targetRole) {
+    canManage(targetRole, targetUserId) {
+        // 본인 계정은 항상 편집 가능
+        if (targetUserId === this.config.currentUser?.id) {
+            return true;
+        }
+        
+        // 다른 사용자는 권한에 따라 관리 가능
         const permissions = this.config.userPermissions || {};
         return permissions.can_manage?.includes(targetRole) || false;
     }
@@ -200,12 +206,17 @@ class UsersManager {
     }
 
     showEditModal(user) {
+        // 본인 계정 편집인지 확인
+        const isSelfEdit = user.id === this.config.currentUser?.id;
+        
         const modalHtml = `
             <div id="user-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
                 <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
                     <div class="mt-3">
                         <div class="flex items-center justify-between mb-4">
-                            <h3 class="text-lg font-medium text-gray-900">사용자 편집</h3>
+                            <h3 class="text-lg font-medium text-gray-900">
+                                ${isSelfEdit ? '내 정보 수정' : '사용자 편집'}
+                            </h3>
                             <button onclick="usersManager.closeModal()" class="text-gray-400 hover:text-gray-600">
                                 <i class="fas fa-times"></i>
                             </button>
@@ -223,7 +234,7 @@ class UsersManager {
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">성명</label>
-                                <input type="text" name="full_name" value="${user.full_name}" required class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                <input type="text" name="full_name" value="${user.full_name}" required ${isSelfEdit ? '' : ''} class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">이메일</label>
@@ -233,12 +244,20 @@ class UsersManager {
                                 <label class="block text-sm font-medium text-gray-700">전화번호</label>
                                 <input type="tel" name="phone" value="${user.phone || ''}" class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
                             </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">역할</label>
-                                <select name="role" class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-                                    ${this.getEditableRoleOptions(user.role)}
-                                </select>
-                            </div>
+                            ${isSelfEdit ? `
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">역할</label>
+                                    <input type="text" value="${user.role}" disabled class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-100 text-gray-500">
+                                    <p class="text-xs text-gray-500 mt-1">본인의 역할은 변경할 수 없습니다.</p>
+                                </div>
+                            ` : `
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">역할</label>
+                                    <select name="role" class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                        ${this.getEditableRoleOptions(user.role)}
+                                    </select>
+                                </div>
+                            `}
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">팀</label>
                                 <input type="text" name="team" value="${user.team || ''}" class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
@@ -297,6 +316,7 @@ class UsersManager {
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">역할</label>
                                 <select name="role" required class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                    <option value="">역할을 선택하세요</option>
                                     ${this.getAvailableRoleOptions()}
                                 </select>
                             </div>
@@ -368,7 +388,6 @@ class UsersManager {
                 full_name: formData.get('full_name'),
                 email: formData.get('email'),
                 phone: formData.get('phone'),
-                role: formData.get('role'),
                 team: formData.get('team')
             };
 
@@ -376,6 +395,12 @@ class UsersManager {
             const password = formData.get('password');
             if (password && password.trim()) {
                 userData.password = password;
+            }
+
+            // 본인 계정이 아닌 경우에만 역할 변경 가능
+            const isSelfEdit = parseInt(userId) === this.config.currentUser?.id;
+            if (!isSelfEdit) {
+                userData.role = formData.get('role');
             }
 
             const response = await fetch(`/api/users/${userId}`, {
@@ -395,7 +420,12 @@ class UsersManager {
             this.closeModal();
             await this.loadUsers();
             await this.loadStatistics();
-            this.showSuccessMessage('사용자 정보가 수정되었습니다.');
+            
+            if (isSelfEdit) {
+                this.showSuccessMessage('내 정보가 수정되었습니다.');
+            } else {
+                this.showSuccessMessage('사용자 정보가 수정되었습니다.');
+            }
 
         } catch (error) {
             this.showErrorMessage(`수정 실패: ${error.message}`);
@@ -413,7 +443,18 @@ class UsersManager {
         const permissions = this.config.userPermissions || {};
         const canCreate = permissions.can_create || [];
         
-        return canCreate.map(role => `<option value="${role}">${role}</option>`).join('');
+        // 역할별 한국어 표시명 매핑
+        const roleDisplayNames = {
+            '개발자': '개발자',
+            '대표': '대표',
+            '팀장': '팀장',
+            '일반사원': '일반사원'
+        };
+        
+        return canCreate.map(role => {
+            const displayName = roleDisplayNames[role] || role;
+            return `<option value="${role}">${displayName}</option>`;
+        }).join('');
     }
 
     getEditableRoleOptions(currentRole) {
@@ -423,9 +464,18 @@ class UsersManager {
         // 관리 가능한 역할 + 현재 역할 포함
         const availableRoles = [...new Set([...canManage, currentRole])];
         
-        return availableRoles.map(role => 
-            `<option value="${role}" ${role === currentRole ? 'selected' : ''}>${role}</option>`
-        ).join('');
+        // 역할별 한국어 표시명 매핑
+        const roleDisplayNames = {
+            '개발자': '개발자',
+            '대표': '대표',
+            '팀장': '팀장',
+            '일반사원': '일반사원'
+        };
+        
+        return availableRoles.map(role => {
+            const displayName = roleDisplayNames[role] || role;
+            return `<option value="${role}" ${role === currentRole ? 'selected' : ''}>${displayName}</option>`;
+        }).join('');
     }
 
     showSuccessMessage(message) {

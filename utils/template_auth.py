@@ -133,6 +133,9 @@ class TemplateAuthManager:
         # current_user의 datetime 필드를 JSON 직렬화 가능한 형태로 변환
         serialized_user = self.serialize_datetime_fields(user)
         
+        # 사용자 생성 권한 확인 - can_create 리스트가 비어있지 않으면 생성 가능
+        can_create_users = len(permissions.get('can_create', [])) > 0
+        
         return {
             "is_authenticated": True,
             "current_user": serialized_user,
@@ -143,7 +146,7 @@ class TemplateAuthManager:
             # 페이지별 접근 권한
             "can_access_users": self.get_user_permission_level(user) >= 3,
             "can_access_admin": self.get_user_permission_level(user) >= 5,
-            "can_create_users": user.get('role') in permissions.get('can_create', []),
+            "can_create_users": can_create_users,
             "can_manage_system": user.get('role') == '개발자',
         }
 

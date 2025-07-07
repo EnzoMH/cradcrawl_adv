@@ -10,6 +10,7 @@ class StatisticsManager {
         this.currentSection = 'overview';
         this.data = {};
         this.refreshInterval = null;
+        this.isDarkMode = this.detectDarkMode();
         
         this.init();
     }
@@ -17,6 +18,7 @@ class StatisticsManager {
     async init() {
         console.log('📊 Statistics Manager 초기화 시작');
         this.setupEventListeners();
+        this.setupDarkModeListener();
         await this.loadInitialData();
         this.startAutoRefresh();
     }
@@ -179,6 +181,7 @@ class StatisticsManager {
         if (!ctx) return;
         
         const coverage = this.data.overview.contact_coverage || {};
+        const colors = this.getChartColors();
         
         if (this.charts.contactCoverage) {
             this.charts.contactCoverage.destroy();
@@ -197,18 +200,20 @@ class StatisticsManager {
                         coverage.homepage?.count || 0
                     ],
                     backgroundColor: [
-                        'rgba(54, 162, 235, 0.8)',
-                        'rgba(255, 99, 132, 0.8)',
-                        'rgba(255, 205, 86, 0.8)',
-                        'rgba(75, 192, 192, 0.8)'
+                        colors.primary,
+                        colors.danger,
+                        colors.warning,
+                        colors.info
                     ],
                     borderColor: [
-                        'rgba(54, 162, 235, 1)',
-                        'rgba(255, 99, 132, 1)',
-                        'rgba(255, 205, 86, 1)',
-                        'rgba(75, 192, 192, 1)'
+                        colors.primary.replace('0.9', '1'),
+                        colors.danger.replace('0.9', '1'),
+                        colors.warning.replace('0.9', '1'),
+                        colors.info.replace('0.9', '1')
                     ],
-                    borderWidth: 1
+                    borderWidth: 3,  // 더 두꺼운 테두리
+                    borderRadius: 8,  // 모서리 둥글게
+                    borderSkipped: false
                 }]
             },
             options: {
@@ -218,6 +223,21 @@ class StatisticsManager {
                         display: false
                     },
                     tooltip: {
+                        backgroundColor: colors.background,
+                        titleColor: colors.text,
+                        bodyColor: colors.text,
+                        borderColor: colors.borderColor,
+                        borderWidth: 2,
+                        cornerRadius: 8,
+                        titleFont: {
+                            size: 14,
+                            weight: 'bold'
+                        },
+                        bodyFont: {
+                            size: 13,
+                            weight: '600'
+                        },
+                        padding: 12,
                         callbacks: {
                             label: function(context) {
                                 const value = context.parsed.y;
@@ -231,11 +251,47 @@ class StatisticsManager {
                 scales: {
                     y: {
                         beginAtZero: true,
+                        grid: {
+                            color: colors.gridLines,
+                            lineWidth: 1.5
+                        },
                         ticks: {
+                            color: colors.text,
+                            font: {
+                                size: 12,
+                                weight: '600'
+                            },
                             callback: function(value) {
                                 return Utils.formatNumber(value);
                             }
+                        },
+                        title: {
+                            display: true,
+                            text: '기관 수',
+                            color: colors.text,
+                            font: {
+                                size: 13,
+                                weight: 'bold'
+                            }
                         }
+                    },
+                    x: {
+                        grid: {
+                            color: colors.gridLines,
+                            lineWidth: 1
+                        },
+                        ticks: {
+                            color: colors.text,
+                            font: {
+                                size: 12,
+                                weight: '600'
+                            }
+                        }
+                    }
+                },
+                elements: {
+                    bar: {
+                        borderWidth: 3
                     }
                 }
             }
@@ -247,6 +303,7 @@ class StatisticsManager {
         if (!ctx) return;
         
         const basicStats = this.data.overview.basic_stats || {};
+        const colors = this.getChartColors();
         
         if (this.charts.completeness) {
             this.charts.completeness.destroy();
@@ -263,23 +320,50 @@ class StatisticsManager {
                 datasets: [{
                     data: [complete, incomplete],
                     backgroundColor: [
-                        'rgba(40, 167, 69, 0.8)',
-                        'rgba(255, 193, 7, 0.8)'
+                        colors.success,
+                        colors.warning
                     ],
                     borderColor: [
-                        'rgba(40, 167, 69, 1)',
-                        'rgba(255, 193, 7, 1)'
+                        colors.success.replace('0.9', '1'),
+                        colors.warning.replace('0.9', '1')
                     ],
-                    borderWidth: 2
+                    borderWidth: 4,  // 더 두꺼운 테두리
+                    hoverBorderWidth: 6,
+                    hoverOffset: 10
                 }]
             },
             options: {
                 responsive: true,
                 plugins: {
                     legend: {
-                        position: 'bottom'
+                        position: 'bottom',
+                        labels: {
+                            color: colors.text,
+                            font: {
+                                size: 13,
+                                weight: '600'
+                            },
+                            padding: 20,
+                            usePointStyle: true,
+                            pointStyle: 'circle'
+                        }
                     },
                     tooltip: {
+                        backgroundColor: colors.background,
+                        titleColor: colors.text,
+                        bodyColor: colors.text,
+                        borderColor: colors.borderColor,
+                        borderWidth: 2,
+                        cornerRadius: 8,
+                        titleFont: {
+                            size: 14,
+                            weight: 'bold'
+                        },
+                        bodyFont: {
+                            size: 13,
+                            weight: '600'
+                        },
+                        padding: 12,
                         callbacks: {
                             label: function(context) {
                                 const value = context.parsed;
@@ -287,6 +371,12 @@ class StatisticsManager {
                                 return `${context.label}: ${Utils.formatNumber(value)}개 (${percentage}%)`;
                             }
                         }
+                    }
+                },
+                cutout: '60%',  // 도넛 구멍 크기
+                elements: {
+                    arc: {
+                        borderWidth: 4
                     }
                 }
             }
@@ -1027,6 +1117,78 @@ class StatisticsManager {
         } finally {
             this.showLoading(false);
         }
+    }
+
+    // ==================== 다크모드 관련 메서드 ====================
+
+    detectDarkMode() {
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ||
+               document.body.classList.contains('dark-mode');
+    }
+
+    getChartColors() {
+        if (this.isDarkMode) {
+            return {
+                primary: 'rgba(96, 165, 250, 0.95)',      // 더 밝고 선명한 파란색
+                success: 'rgba(34, 197, 94, 0.95)',       // 더 밝은 초록색
+                warning: 'rgba(251, 191, 36, 0.95)',      // 더 밝은 노란색
+                danger: 'rgba(248, 113, 113, 0.95)',      // 더 밝은 빨간색
+                info: 'rgba(56, 189, 248, 0.95)',         // 더 밝은 시안색
+                text: '#f8fafc',                          // 더 밝은 텍스트
+                gridLines: '#64748b',                     // 더 밝은 그리드
+                background: 'rgba(15, 23, 42, 0.95)',     // 더 진한 배경
+                borderColor: '#94a3b8'                    // 테두리 색상
+            };
+        } else {
+            return {
+                primary: 'rgba(37, 99, 235, 0.9)',        // 더 진한 파란색
+                success: 'rgba(21, 128, 61, 0.9)',        // 더 진한 초록색
+                warning: 'rgba(217, 119, 6, 0.9)',        // 더 진한 노란색
+                danger: 'rgba(185, 28, 28, 0.9)',         // 더 진한 빨간색
+                info: 'rgba(7, 89, 133, 0.9)',            // 더 진한 시안색
+                text: '#1f2937',                          // 더 진한 텍스트
+                gridLines: '#d1d5db',                     // 적당한 그리드
+                background: 'rgba(255, 255, 255, 0.95)', // 밝은 배경
+                borderColor: '#6b7280'                    // 테두리 색상
+            };
+        }
+    }
+
+    setupDarkModeListener() {
+        // 시스템 다크모드 변경 감지
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+            this.isDarkMode = this.detectDarkMode();
+            this.updateAllCharts();
+        });
+
+        // 수동 다크모드 토글 감지
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                    const newDarkMode = this.detectDarkMode();
+                    if (newDarkMode !== this.isDarkMode) {
+                        this.isDarkMode = newDarkMode;
+                        this.updateAllCharts();
+                    }
+                }
+            });
+        });
+
+        observer.observe(document.body, {
+            attributes: true,
+            attributeFilter: ['class']
+        });
+    }
+
+    updateAllCharts() {
+        // 기존 차트들을 새로운 색상으로 다시 생성
+        if (this.data.overview) {
+            this.createContactCoverageChart();
+            this.createCompletenessChart();
+        }
+        
+        // 다른 섹션의 차트들도 업데이트
+        this.resizeAllCharts();
     }
 }
 
