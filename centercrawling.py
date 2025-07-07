@@ -1,0 +1,1185 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+아동센터 팩스번호 추출 시스템
+Selenium WebDriver + BeautifulSoup + Gemini AI를 활용한 자동 팩스번호 추출
+"""
+
+import os
+import re
+import time
+import json
+import logging
+import pandas as pd
+import smtplib
+import traceback
+from typing import Dict, List, Any, Optional, Tuple
+from datetime import datetime
+from urllib.parse import urljoin, urlparse
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
+import requests
+from bs4 import BeautifulSoup
+
+# Selenium 관련
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
+import undetected_chromedriver as uc
+import random
+
+# AI 관련 (utils/ai_helpers.py 참고)
+import google.generativeai as genai
+from dotenv import load_dotenv
+
+# 추가 import 필요
+import undetected_chromedriver as uc
+import random
+from selenium.webdriver.common.action_chains import ActionChains
+
+# 로깅 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('centercrawling.log', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+
+# AI 모델 설정 (ai_helpers.py 스타일)
+AI_MODEL_CONFIG = {
+    "temperature": 0.1,
+    "top_p": 0.8,
+    "top_k": 40,
+    "max_output_tokens": 2048,
+}
+
+class CenterCrawlingBot:
+    """아동센터 팩스번호 추출 봇"""
+    
+    def __init__(self, excel_path: str, use_ai: bool = True, send_email: bool = True):
+        """
+        초기화
+        
+        Args:
+            excel_path: 원본 엑셀 파일 경로
+            use_ai: AI 기능 사용 여부
+            send_email: 이메일 전송 여부
+        """
+        self.excel_path = excel_path
+        self.use_ai = use_ai
+        self.send_email = send_email
+        self.logger = logging.getLogger(__name__)
+        
+        # 환경 변수 로드
+        load_dotenv()
+        
+        # AI 모델 초기화 (ai_helpers.py 스타일)
+        self.ai_model_manager = None
+        if self.use_ai:
+            self._initialize_ai()
+        
+        # 이메일 설정
+        self.email_config = {
+            'smtp_server': 'smtp.gmail.com',
+            'smtp_port': 587,
+            'sender_email': os.getenv('SENDER_EMAIL', 'your_email@gmail.com'),
+            'sender_password': os.getenv('SENDER_PASSWORD', 'your_app_password'),
+            'recipient_email': 'isgs003@naver.com', 
+            'recipient_email2': 'crad3981@naver.com'   # 테스트 이메일
+        }
+        
+        # WebDriver 초기화
+        self.driver = None
+        self._initialize_webdriver()
+        
+        # 데이터 로드
+        self.df = None
+        self._load_data()
+        
+        # 결과 저장용
+        self.results = []
+        self.processed_count = 0
+        self.success_count = 0
+        self.duplicate_count = 0  # 중복 제거된 팩스번호 개수
+        self.start_time = datetime.now()
+        
+        # 팩스번호 정규식 패턴
+        self.fax_patterns = [
+            r'팩스[\s:：]*(\d{2,4}[-\s]?\d{3,4}[-\s]?\d{4})',
+            r'fax[\s:：]*(\d{2,4}[-\s]?\d{3,4}[-\s]?\d{4})',
+            r'F[\s:：]*(\d{2,4}[-\s]?\d{3,4}[-\s]?\d{4})',
+            r'전송[\s:：]*(\d{2,4}[-\s]?\d{3,4}[-\s]?\d{4})',
+            r'(\d{2,4}[-\s]?\d{3,4}[-\s]?\d{4}).*팩스',
+            r'(\d{2,4}[-\s]?\d{3,4}[-\s]?\d{4}).*fax',
+        ]
+        
+        # 홈페이지 URL 정규식 패턴
+        self.url_patterns = [
+            r'https?://[^\s<>"\']+',
+            r'www\.[^\s<>"\']+',
+            r'[a-zA-Z0-9.-]+\.(com|co\.kr|or\.kr|go\.kr|net|org)[^\s<>"\']*'
+        ]
+        
+        self.logger.info("🚀 CenterCrawlingBot 초기화 완료")
+    
+    class AIModelManager:
+        """AI 모델 관리 클래스 (ai_helpers.py 스타일)"""
+        
+        def __init__(self):
+            """초기화"""
+            self.gemini_model = None
+            self.gemini_config = None
+            self.setup_models()
+        
+        def setup_models(self):
+            """AI 모델 초기화"""
+            try:
+                # Gemini API 키 확인
+                api_key = os.getenv('GEMINI_API_KEY')
+                if not api_key:
+                    raise ValueError("GEMINI_API_KEY 환경 변수가 설정되지 않았습니다.")
+                
+                # Gemini 설정
+                genai.configure(api_key=api_key)
+                self.gemini_config = AI_MODEL_CONFIG
+                self.gemini_model = genai.GenerativeModel(
+                    "gemini-1.5-flash",
+                    generation_config=self.gemini_config
+                )
+                
+                logging.getLogger(__name__).info("🤖 Gemini AI 모델 초기화 성공")
+                
+            except Exception as e:
+                logging.getLogger(__name__).error(f"❌ AI 모델 초기화 실패: {e}")
+                logging.getLogger(__name__).debug(traceback.format_exc())
+                raise
+        
+        def extract_with_gemini(self, text_content: str, prompt_template: str) -> str:
+            """
+            텍스트 콘텐츠를 Gemini API에 전달하여 정보 추출
+            
+            Args:
+                text_content: 분석할 텍스트 콘텐츠
+                prompt_template: 프롬프트 템플릿 문자열
+                
+            Returns:
+                추출된 정보 문자열
+            """
+            try:
+                # 텍스트 길이 제한
+                max_length = 32000
+                if len(text_content) > max_length:
+                    front_portion = int(max_length * 0.67)
+                    back_portion = max_length - front_portion
+                    text_content = text_content[:front_portion] + "\n... (중략) ...\n" + text_content[-back_portion:]
+                    logging.getLogger(__name__).warning(f"텍스트가 너무 길어 일부를 생략했습니다: {len(text_content)} -> {max_length}")
+                
+                # 프롬프트 구성
+                prompt = prompt_template.format(text_content=text_content)
+                
+                # 응답 생성
+                response = self.gemini_model.generate_content(prompt)
+                result_text = response.text
+                
+                # 결과 로깅 (첫 200자만)
+                logging.getLogger(__name__).info(f"Gemini API 응답 (일부): {result_text[:200]}...")
+                
+                return result_text
+                
+            except Exception as e:
+                logging.getLogger(__name__).error(f"Gemini API 호출 중 오류: {str(e)}")
+                logging.getLogger(__name__).debug(traceback.format_exc())
+                return f"오류: {str(e)}"
+    
+    def _initialize_ai(self):
+        """AI 모델 초기화"""
+        try:
+            self.ai_model_manager = self.AIModelManager()
+            self.logger.info("🤖 AI 모델 관리자 초기화 완료")
+            
+        except Exception as e:
+            self.logger.error(f"❌ AI 모델 초기화 실패: {e}")
+            self.use_ai = False
+    
+    def _initialize_webdriver(self):
+        """WebDriver 초기화 (undetected-chromedriver 사용)"""
+        try:
+            # 🤖 undetected-chromedriver 사용
+            chrome_options = uc.ChromeOptions()
+            
+            # 기본 설정
+            chrome_options.add_argument('--no-sandbox')
+            chrome_options.add_argument('--disable-dev-shm-usage')
+            chrome_options.add_argument('--disable-gpu')
+            chrome_options.add_argument('--window-size=1920,1080')
+            chrome_options.add_argument('--start-maximized')
+            
+            # 🔧 고급 봇 감지 우회 옵션들
+            chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+            chrome_options.add_argument('--disable-extensions')
+            chrome_options.add_argument('--disable-plugins')
+            chrome_options.add_argument('--disable-default-apps')
+            chrome_options.add_argument('--disable-background-timer-throttling')
+            chrome_options.add_argument('--disable-renderer-backgrounding')
+            chrome_options.add_argument('--disable-backgrounding-occluded-windows')
+            chrome_options.add_argument('--disable-client-side-phishing-detection')
+            chrome_options.add_argument('--disable-sync')
+            chrome_options.add_argument('--disable-translate')
+            chrome_options.add_argument('--hide-scrollbars')
+            chrome_options.add_argument('--mute-audio')
+            chrome_options.add_argument('--no-first-run')
+            chrome_options.add_argument('--disable-infobars')
+            chrome_options.add_argument('--disable-notifications')
+            chrome_options.add_argument('--disable-popup-blocking')
+            
+            # 🎭 프로필 설정
+            chrome_options.add_argument('--disable-web-security')
+            chrome_options.add_argument('--allow-running-insecure-content')
+            chrome_options.add_argument('--disable-features=TranslateUI')
+            chrome_options.add_argument('--disable-ipc-flooding-protection')
+            
+            # undetected-chromedriver 사용
+            self.driver = uc.Chrome(options=chrome_options, version_main=None)
+            
+            # 🔧 추가 JavaScript 실행으로 봇 감지 우회
+            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            self.driver.execute_script("Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]})")
+            self.driver.execute_script("Object.defineProperty(navigator, 'languages', {get: () => ['ko-KR', 'ko', 'en-US', 'en']})")
+            self.driver.execute_script("window.navigator.chrome = {runtime: {}};")
+            self.driver.execute_script("Object.defineProperty(navigator, 'permissions', {get: () => ({query: x => Promise.resolve({state: 'granted'})})});")
+            
+            self.driver.implicitly_wait(10)
+            self.logger.info("🌐 WebDriver 초기화 완료 (undetected-chromedriver)")
+            
+        except Exception as e:
+            self.logger.error(f"❌ undetected-chromedriver 초기화 실패: {e}")
+            # fallback to regular webdriver
+            self._initialize_regular_webdriver()
+    
+    def _initialize_regular_webdriver(self):
+        """일반 WebDriver 초기화 (fallback)"""
+        try:
+            from selenium.webdriver.chrome.options import Options
+            
+            chrome_options = Options()
+            chrome_options.add_argument('--no-sandbox')
+            chrome_options.add_argument('--disable-dev-shm-usage')
+            chrome_options.add_argument('--disable-gpu')
+            chrome_options.add_argument('--window-size=1920,1080')
+            
+            # User-Agent 랜덤화
+            user_agents = [
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            ]
+            selected_user_agent = random.choice(user_agents)
+            chrome_options.add_argument(f'--user-agent={selected_user_agent}')
+            
+            self.driver = webdriver.Chrome(options=chrome_options)
+            self.driver.implicitly_wait(10)
+            self.logger.info("🌐 일반 WebDriver 초기화 완료 (fallback)")
+            
+        except Exception as e:
+            self.logger.error(f"❌ 일반 WebDriver 초기화 실패: {e}")
+            raise
+    
+    def _load_data(self):
+        """엑셀 데이터 로드"""
+        try:
+            self.df = pd.read_excel(self.excel_path)
+            self.logger.info(f"📊 데이터 로드 완료: {len(self.df)}개 기관")
+            self.logger.info(f"📋 컬럼: {list(self.df.columns)}")
+            
+            # 컬럼명 정규화
+            column_mapping = {
+                '기관명': 'name',
+                '주소': 'address', 
+                '전화번호': 'phone',
+                '팩스번호': 'fax',
+                '홈페이지': 'homepage'
+            }
+            
+            self.df = self.df.rename(columns=column_mapping)
+            
+            # 누락된 컬럼 추가
+            for col in ['name', 'address', 'phone', 'fax', 'homepage']:
+                if col not in self.df.columns:
+                    self.df[col] = ''
+            
+            self.logger.info(f"✅ 데이터 전처리 완료")
+            
+        except Exception as e:
+            self.logger.error(f"❌ 데이터 로드 실패: {e}")
+            raise
+    
+    def run_extraction(self):
+        """전체 추출 프로세스 실행"""
+        try:
+            self.logger.info("🎯 팩스번호 추출 시작")
+            
+            # 1단계: 검색을 통한 팩스번호 추출
+            self.logger.info("📞 1단계: 검색을 통한 팩스번호 추출")
+            self._extract_fax_by_search()
+            
+            # 2단계: 검색을 통한 홈페이지 추출
+            self.logger.info("🌐 2단계: 검색을 통한 홈페이지 추출")
+            self._extract_homepage_by_search()
+            
+            # 3단계: 홈페이지 직접 접속으로 팩스번호 추출
+            self.logger.info("🔍 3단계: 홈페이지 직접 접속으로 팩스번호 추출")
+            self._extract_fax_from_homepage()
+            
+            # 4단계: 결과 저장
+            self.logger.info("💾 4단계: 결과 저장")
+            result_path = self._save_results()
+            
+            # 5단계: 이메일 전송
+            if self.send_email:
+                self.logger.info("📧 5단계: 이메일 전송")
+                self._send_completion_email(result_path)
+            
+            self.logger.info("🎉 전체 추출 프로세스 완료")
+            
+        except Exception as e:
+            self.logger.error(f"❌ 추출 프로세스 실패: {e}")
+            # 오류 발생 시에도 이메일 전송
+            if self.send_email:
+                self._send_error_email(str(e))
+            raise
+        finally:
+            self._cleanup()
+    
+    def _search_with_multiple_engines(self, query: str, org_name: str, search_type: str = 'fax') -> Optional[str]:
+        """다중 검색 엔진 사용 (구글만 사용)"""
+        try:
+            self.logger.info(f"🔍 구글 검색 시도: {query}")
+            # 🐌 랜덤 지연 시간 추가
+            delay = random.uniform(2, 5)
+            time.sleep(delay)
+            
+            # 구글 검색 페이지로 이동
+            self.driver.get('https://www.google.com')
+            
+            # 🤖 사람처럼 행동하기 위한 추가 지연
+            time.sleep(random.uniform(1, 3))
+            
+            # 페이지 스크롤 (사람처럼 행동)
+            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight/4);")
+            time.sleep(random.uniform(0.5, 1.5))
+            
+            # 검색창 찾기
+            search_box = WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.NAME, 'q'))
+            )
+            
+            # 🎯 사람처럼 타이핑 (글자별 랜덤 지연)
+            search_box.clear()
+            for char in query:
+                search_box.send_keys(char)
+                time.sleep(random.uniform(0.05, 0.2))
+            
+            # 마우스 움직임 시뮬레이션
+            ActionChains(self.driver).move_to_element(search_box).perform()
+            time.sleep(random.uniform(0.5, 1.5))
+            
+            # 검색 실행
+            search_box.send_keys(Keys.RETURN)
+            
+            # 결과 페이지 로딩 대기
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.ID, 'search'))
+            )
+            
+            # 🔍 페이지 소스에서 팩스번호 추출
+            page_source = self.driver.page_source
+            soup = BeautifulSoup(page_source, 'html.parser')
+            
+            # 검색 결과 텍스트에서 팩스번호 찾기
+            for pattern in self.fax_patterns:
+                matches = re.findall(pattern, soup.get_text(), re.IGNORECASE)
+                for match in matches:
+                    fax_number = self._normalize_phone_number(match)
+                    if self._is_valid_phone_format(fax_number):
+                        return fax_number
+            
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"❌ 팩스번호 검색 오류: {e}")
+            return None
+    
+    def _search_for_homepage(self, query: str, org_name: str) -> Optional[str]:
+        """구글 검색으로 홈페이지 찾기 (고급 봇 감지 우회)"""
+        try:
+            # 🐌 랜덤 지연 시간 추가
+            delay = random.uniform(2, 5)
+            time.sleep(delay)
+            
+            # 구글 검색 페이지로 이동
+            self.driver.get('https://www.google.com')
+            
+            # 🤖 사람처럼 행동하기 위한 추가 지연
+            time.sleep(random.uniform(1, 3))
+            
+            # 페이지 스크롤 (사람처럼 행동)
+            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight/4);")
+            time.sleep(random.uniform(0.5, 1.5))
+            
+            # 검색창 찾기
+            search_box = WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.NAME, 'q'))
+            )
+            
+            # �� 사람처럼 타이핑 (글자별 랜덤 지연)
+            search_box.clear()
+            for char in query:
+                search_box.send_keys(char)
+                time.sleep(random.uniform(0.05, 0.2))
+            
+            # 마우스 움직임 시뮬레이션
+            ActionChains(self.driver).move_to_element(search_box).perform()
+            time.sleep(random.uniform(0.5, 1.5))
+            
+            # 검색 실행
+            search_box.send_keys(Keys.RETURN)
+            
+            # 결과 페이지 로딩 대기
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.ID, 'search'))
+            )
+            
+            # 🔍 검색 결과에서 URL 추출
+            try:
+                # 검색 결과 링크들 찾기
+                links = self.driver.find_elements(By.CSS_SELECTOR, "h3 a, .yuRUbf a")
+                
+                for link in links[:5]:  # 상위 5개만 확인
+                    href = link.get_attribute("href")
+                    if href and self._is_valid_homepage_url(href, org_name):
+                        return href
+            except:
+                # CSS 선택자가 안 되면 페이지 소스에서 직접 추출
+                page_source = self.driver.page_source
+                soup = BeautifulSoup(page_source, 'html.parser')
+                
+                for link in soup.find_all('a', href=True):
+                    href = link.get('href')
+                    if href and href.startswith('/url?q='):
+                        actual_url = href.split('/url?q=')[1].split('&')[0]
+                        if self._is_valid_homepage_url(actual_url, org_name):
+                            return actual_url
+            
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"❌ 홈페이지 검색 오류: {e}")
+            return None
+    
+    def _extract_fax_by_search(self):
+        """검색을 통한 팩스번호 추출"""
+        for idx, row in self.df.iterrows():
+            if pd.notna(row['fax']) and row['fax'].strip():
+                continue  # 이미 팩스번호가 있으면 스킵
+            
+            name = row['name']
+            phone = row['phone']
+            if not name or pd.isna(name):
+                continue
+            
+            try:
+                self.logger.info(f"📞 팩스번호 검색: {name}")
+                
+                # 검색어: 기관명 + 팩스번호
+                search_query = f"{name} 팩스번호"
+                fax_number = self._search_for_fax(search_query, name)
+                
+                if fax_number:
+                    # 전화번호와 중복/유사성 체크
+                    if self._is_valid_fax_number(fax_number, phone, name):
+                        self.df.at[idx, 'fax'] = fax_number
+                        self.success_count += 1
+                        self.logger.info(f"✅ 팩스번호 발견: {name} -> {fax_number}")
+                    else:
+                        self.duplicate_count += 1
+                        self.logger.info(f"🚫 팩스번호 중복/유사: {name} -> {fax_number} (전화번호: {phone})")
+                else:
+                    self.logger.info(f"❌ 팩스번호 없음: {name}")
+                
+                self.processed_count += 1
+                time.sleep(2)  # 요청 간격 조절
+                
+            except Exception as e:
+                self.logger.error(f"❌ 팩스번호 검색 오류: {name} - {e}")
+                continue
+    
+    def _extract_homepage_by_search(self):
+        """검색을 통한 홈페이지 추출"""
+        for idx, row in self.df.iterrows():
+            if pd.notna(row['homepage']) and row['homepage'].strip():
+                continue  # 이미 홈페이지가 있으면 스킵
+            
+            name = row['name']
+            if not name or pd.isna(name):
+                continue
+            
+            try:
+                self.logger.info(f"🌐 홈페이지 검색: {name}")
+                
+                # 검색어: 기관명 + 홈페이지
+                search_query = f"{name} 홈페이지"
+                homepage_url = self._search_for_homepage(search_query, name)
+                
+                if homepage_url:
+                    self.df.at[idx, 'homepage'] = homepage_url
+                    self.logger.info(f"✅ 홈페이지 발견: {name} -> {homepage_url}")
+                else:
+                    self.logger.info(f"❌ 홈페이지 없음: {name}")
+                
+                time.sleep(2)  # 요청 간격 조절
+                
+            except Exception as e:
+                self.logger.error(f"❌ 홈페이지 검색 오류: {name} - {e}")
+                continue
+    
+    def _extract_fax_from_homepage(self):
+        """홈페이지 직접 접속으로 팩스번호 추출"""
+        # 팩스번호가 없고 홈페이지가 있는 행들
+        missing_fax_rows = self.df[
+            (self.df['fax'].isna() | (self.df['fax'] == '')) & 
+            (self.df['homepage'].notna() & (self.df['homepage'] != ''))
+        ]
+        
+        for idx, row in missing_fax_rows.iterrows():
+            name = row['name']
+            homepage = row['homepage']
+            phone = row['phone']
+            
+            try:
+                self.logger.info(f"🔍 홈페이지 직접 접속: {name} -> {homepage}")
+                
+                # 홈페이지 크롤링
+                page_data = self._crawl_homepage(homepage)
+                
+                if page_data:
+                    # 1. HTML에서 직접 팩스번호 추출 시도
+                    fax_numbers = self._extract_fax_from_html(page_data.get('html', ''))
+                    
+                    # 유효한 팩스번호 찾기
+                    valid_fax = None
+                    for fax_num in fax_numbers:
+                        if self._is_valid_fax_number(fax_num, phone, name):
+                            valid_fax = fax_num
+                            break
+                    
+                    if not valid_fax and self.use_ai and self.ai_model_manager:
+                        # 2. AI를 통한 팩스번호 추출
+                        ai_fax = self._extract_fax_with_ai(name, page_data)
+                        if ai_fax and self._is_valid_fax_number(ai_fax, phone, name):
+                            valid_fax = ai_fax
+                    
+                    if valid_fax:
+                        self.df.at[idx, 'fax'] = valid_fax
+                        self.success_count += 1
+                        self.logger.info(f"✅ 홈페이지에서 팩스번호 추출: {name} -> {valid_fax}")
+                    else:
+                        self.logger.info(f"❌ 홈페이지에서 유효한 팩스번호 없음: {name}")
+                
+                time.sleep(3)  # 요청 간격 조절
+                
+            except Exception as e:
+                self.logger.error(f"❌ 홈페이지 크롤링 오류: {name} - {e}")
+                continue
+    
+    def _is_valid_fax_number(self, fax_number: str, phone_number: str, org_name: str) -> bool:
+        """
+        팩스번호 유효성 검증
+        
+        Args:
+            fax_number: 추출된 팩스번호
+            phone_number: 기존 전화번호
+            org_name: 기관명
+            
+        Returns:
+            bool: 유효한 팩스번호인지 여부
+        """
+        try:
+            if not fax_number or pd.isna(fax_number):
+                return False
+            
+            # 팩스번호 정규화
+            normalized_fax = self._normalize_phone_number(fax_number)
+            
+            # 전화번호가 있는 경우 비교
+            if phone_number and not pd.isna(phone_number):
+                normalized_phone = self._normalize_phone_number(str(phone_number))
+                
+                # 1. 완전히 동일한 경우 제외
+                if normalized_fax == normalized_phone:
+                    self.logger.info(f"🚫 팩스번호와 전화번호 동일: {org_name} - {normalized_fax}")
+                    return False
+                
+                # 2. 유사성 검사 (지번 차이 등 고려)
+                if self._are_numbers_too_similar(normalized_fax, normalized_phone):
+                    self.logger.info(f"🚫 팩스번호와 전화번호 유사: {org_name} - FAX:{normalized_fax} vs TEL:{normalized_phone}")
+                    return False
+            
+            # 3. 팩스번호 형식 검증
+            if not self._is_valid_phone_format(normalized_fax):
+                self.logger.info(f"🚫 잘못된 팩스번호 형식: {org_name} - {normalized_fax}")
+                return False
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ 팩스번호 유효성 검증 오류: {org_name} - {e}")
+            return False
+    
+    def _are_numbers_too_similar(self, fax: str, phone: str) -> bool:
+        """
+        두 번호가 너무 유사한지 검사
+        
+        Args:
+            fax: 팩스번호
+            phone: 전화번호
+            
+        Returns:
+            bool: 유사한 경우 True
+        """
+        try:
+            # 숫자만 추출
+            fax_digits = re.sub(r'[^\d]', '', fax)
+            phone_digits = re.sub(r'[^\d]', '', phone)
+            
+            # 길이가 다르면 비교하지 않음
+            if len(fax_digits) != len(phone_digits):
+                return False
+            
+            # 같은 자리수끼리 비교
+            if len(fax_digits) < 8:  # 너무 짧으면 비교하지 않음
+                return False
+            
+            # 앞자리 (지역번호) 비교
+            fax_area = fax_digits[:3] if len(fax_digits) >= 10 else fax_digits[:2]
+            phone_area = phone_digits[:3] if len(phone_digits) >= 10 else phone_digits[:2]
+            
+            # 지역번호가 같고
+            if fax_area == phone_area:
+                # 뒷자리에서 1-2자리만 다른 경우 (지번 차이 등)
+                fax_suffix = fax_digits[len(fax_area):]
+                phone_suffix = phone_digits[len(phone_area):]
+                
+                # 뒷자리 차이 계산
+                diff_count = sum(1 for i, (f, p) in enumerate(zip(fax_suffix, phone_suffix)) if f != p)
+                
+                # 2자리 이하 차이면 유사한 것으로 판단
+                if diff_count <= 2:
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"❌ 번호 유사성 검사 오류: {e}")
+            return False
+    
+    def _is_valid_phone_format(self, phone: str) -> bool:
+        """
+        전화번호 형식 유효성 검사
+        
+        Args:
+            phone: 전화번호
+            
+        Returns:
+            bool: 유효한 형식인지 여부
+        """
+        try:
+            # 숫자만 추출
+            digits = re.sub(r'[^\d]', '', phone)
+            
+            # 길이 검사 (8자리 이상 11자리 이하)
+            if len(digits) < 8 or len(digits) > 11:
+                return False
+            
+            # 한국 전화번호 패턴 검사
+            valid_patterns = [
+                r'^02\d{7,8}$',      # 서울 (02-XXXX-XXXX)
+                r'^0[3-6]\d{7,8}$',  # 지역번호 (031-XXX-XXXX)
+                r'^070\d{7,8}$',     # 인터넷전화
+                r'^1[5-9]\d{6,7}$',  # 특수번호
+                r'^080\d{7,8}$',     # 무료전화
+            ]
+            
+            for pattern in valid_patterns:
+                if re.match(pattern, digits):
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"❌ 전화번호 형식 검사 오류: {e}")
+            return False
+    
+    def _search_for_fax(self, query: str, org_name: str) -> Optional[str]:
+        """팩스번호 검색 (다중 검색 엔진 사용)"""
+        return self._search_with_multiple_engines(query, org_name, 'fax')
+    
+    def _search_for_homepage(self, query: str, org_name: str) -> Optional[str]:
+        """홈페이지 검색 (다중 검색 엔진 사용)"""
+        return self._search_with_multiple_engines(query, org_name, 'homepage')
+    
+    def _search_with_multiple_engines(self, query: str, org_name: str, search_type: str = 'fax') -> Optional[str]:
+        """구글 검색 사용"""
+        try:
+            self.logger.info(f"🔍 구글 검색 시도: {query}")
+            
+            # 🐌 랜덤 지연 시간 추가
+            delay = random.uniform(2, 5)
+            time.sleep(delay)
+            
+            # 구글 검색 페이지로 이동
+            self.driver.get('https://www.google.com')
+            
+            # 🤖 사람처럼 행동하기 위한 추가 지연
+            time.sleep(random.uniform(1, 3))
+            
+            # 페이지 스크롤 (사람처럼 행동)
+            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight/4);")
+            time.sleep(random.uniform(0.5, 1.5))
+            
+            # 검색창 찾기
+            search_box = WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.NAME, 'q'))
+            )
+            
+            # 🎯 사람처럼 타이핑 (글자별 랜덤 지연)
+            search_box.clear()
+            for char in query:
+                search_box.send_keys(char)
+                time.sleep(random.uniform(0.05, 0.2))
+            
+            # 마우스 움직임 시뮬레이션
+            ActionChains(self.driver).move_to_element(search_box).perform()
+            time.sleep(random.uniform(0.5, 1.5))
+            
+            # 검색 실행
+            search_box.send_keys(Keys.RETURN)
+            
+            # 결과 페이지 로딩 대기
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.ID, 'search'))
+            )
+            
+            # 결과 처리
+            if search_type == 'fax':
+                result = self._extract_fax_from_search_results()
+            else:
+                result = self._extract_homepage_from_search_results(org_name)
+            
+            if result:
+                self.logger.info(f"✅ 구글에서 결과 발견: {result}")
+                return result
+            else:
+                self.logger.info(f"❌ 구글에서 결과 없음: {query}")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"❌ 구글 검색 오류: {e}")
+            return None
+    
+
+
+    def _extract_fax_from_search_results(self) -> Optional[str]:
+        """검색 결과에서 팩스번호 추출"""
+        try:
+            page_source = self.driver.page_source
+            soup = BeautifulSoup(page_source, 'html.parser')
+            
+            # 검색 결과 텍스트에서 팩스번호 찾기
+            for pattern in self.fax_patterns:
+                matches = re.findall(pattern, soup.get_text(), re.IGNORECASE)
+                for match in matches:
+                    fax_number = self._normalize_phone_number(match)
+                    if self._is_valid_phone_format(fax_number):
+                        return fax_number
+            
+            return None
+        except Exception as e:
+            self.logger.error(f"❌ 검색 결과 팩스번호 추출 오류: {e}")
+            return None
+    
+    def _extract_homepage_from_search_results(self, org_name: str) -> Optional[str]:
+        """검색 결과에서 홈페이지 URL 추출"""
+        try:
+            # 검색 결과 링크들 찾기
+            try:
+                links = self.driver.find_elements(By.CSS_SELECTOR, "h3 a, .yuRUbf a")
+                
+                for link in links[:5]:  # 상위 5개만 확인
+                    href = link.get_attribute("href")
+                    if href and self._is_valid_homepage_url(href, org_name):
+                        return href
+            except:
+                # CSS 선택자가 안 되면 페이지 소스에서 직접 추출
+                page_source = self.driver.page_source
+                soup = BeautifulSoup(page_source, 'html.parser')
+                
+                for link in soup.find_all('a', href=True):
+                    href = link.get('href')
+                    if href and href.startswith('/url?q='):
+                        actual_url = href.split('/url?q=')[1].split('&')[0]
+                        if self._is_valid_homepage_url(actual_url, org_name):
+                            return actual_url
+            
+            return None
+        except Exception as e:
+            self.logger.error(f"❌ 검색 결과 홈페이지 추출 오류: {e}")
+            return None
+    
+    def _crawl_homepage(self, url: str) -> Optional[Dict[str, Any]]:
+        """홈페이지 크롤링"""
+        try:
+            # URL 정규화
+            if not url.startswith(('http://', 'https://')):
+                url = 'https://' + url
+            
+            self.driver.get(url)
+            time.sleep(3)  # 페이지 로딩 대기
+            
+            # 페이지 소스 가져오기
+            page_source = self.driver.page_source
+            
+            # BeautifulSoup으로 파싱
+            soup = BeautifulSoup(page_source, 'html.parser')
+            
+            # 텍스트 추출
+            text_content = soup.get_text(separator=' ', strip=True)
+            
+            # 메타 정보 추출
+            title = soup.find('title')
+            title_text = title.get_text(strip=True) if title else ''
+            
+            meta_desc = soup.find('meta', attrs={'name': 'description'})
+            meta_desc_text = meta_desc.get('content', '') if meta_desc else ''
+            
+            return {
+                'url': url,
+                'html': page_source,
+                'text_content': text_content,
+                'title': title_text,
+                'meta_description': meta_desc_text
+            }
+            
+        except Exception as e:
+            self.logger.error(f"❌ 홈페이지 크롤링 오류: {url} - {e}")
+            return None
+    
+    def _extract_fax_from_html(self, html_content: str) -> List[str]:
+        """HTML에서 팩스번호 추출 (여러 개 반환)"""
+        try:
+            fax_numbers = []
+            for pattern in self.fax_patterns:
+                matches = re.findall(pattern, html_content, re.IGNORECASE)
+                for match in matches:
+                    normalized = self._normalize_phone_number(match)
+                    if normalized and normalized not in fax_numbers:
+                        fax_numbers.append(normalized)
+            
+            return fax_numbers
+            
+        except Exception as e:
+            self.logger.error(f"❌ HTML 팩스번호 추출 오류: {e}")
+            return []
+    
+    def _extract_fax_with_ai(self, org_name: str, page_data: Dict[str, Any]) -> Optional[str]:
+        """AI를 통한 팩스번호 추출"""
+        if not self.use_ai or not self.ai_model_manager:
+            return None
+        
+        try:
+            prompt_template = """
+'{org_name}' 기관의 홈페이지에서 팩스번호를 찾아주세요.
+
+**홈페이지 정보:**
+- 제목: {title}
+- URL: {url}
+
+**홈페이지 내용:**
+{text_content}
+
+**요청:**
+이 기관의 팩스번호를 찾아서 다음 형식으로만 응답해주세요:
+- 팩스번호가 있으면: 팩스번호만 (예: 02-1234-5678)
+- 팩스번호가 없으면: "없음"
+
+팩스번호는 다음과 같은 형태입니다:
+- 팩스: 02-1234-5678
+- FAX: 031-123-4567  
+- F: 032-987-6543
+- 전송: 042-555-1234
+
+주의: 전화번호와 팩스번호가 다른 번호인지 확인해주세요.
+""".format(
+                org_name=org_name,
+                title=page_data.get('title', ''),
+                url=page_data.get('url', ''),
+                text_content=page_data.get('text_content', '')[:3000]
+            )
+            
+            # AI 모델 호출
+            response_text = self.ai_model_manager.extract_with_gemini(
+                page_data.get('text_content', ''),
+                prompt_template
+            )
+            
+            # AI 응답에서 팩스번호 추출
+            if response_text and response_text != "없음" and "오류:" not in response_text:
+                # 숫자와 하이픈만 추출
+                fax_match = re.search(r'(\d{2,4}[-\s]?\d{3,4}[-\s]?\d{4})', response_text)
+                if fax_match:
+                    return self._normalize_phone_number(fax_match.group(1))
+            
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"❌ AI 팩스번호 추출 오류: {org_name} - {e}")
+            return None
+    
+    def _normalize_phone_number(self, phone: str) -> str:
+        """전화번호 정규화"""
+        # 숫자만 추출
+        numbers = re.findall(r'\d+', phone)
+        if not numbers:
+            return phone
+        
+        # 하이픈으로 연결
+        if len(numbers) >= 3:
+            return f"{numbers[0]}-{numbers[1]}-{numbers[2]}"
+        elif len(numbers) == 2:
+            return f"{numbers[0]}-{numbers[1]}"
+        else:
+            return numbers[0]
+    
+    def _is_valid_homepage_url(self, url: str, org_name: str) -> bool:
+        """유효한 홈페이지 URL인지 확인"""
+        try:
+            # 구글, 네이버 등 검색 사이트 제외
+            excluded_domains = [
+                'google.com', 'naver.com', 'daum.net', 'youtube.com',
+                'facebook.com', 'instagram.com', 'blog.naver.com'
+            ]
+            
+            parsed_url = urlparse(url)
+            domain = parsed_url.netloc.lower()
+            
+            for excluded in excluded_domains:
+                if excluded in domain:
+                    return False
+            
+            return True
+            
+        except Exception:
+            return False
+    
+    def _save_results(self) -> str:
+        """결과 저장"""
+        try:
+            # 타임스탬프 추가
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            # 결과 파일명
+            base_name = os.path.splitext(os.path.basename(self.excel_path))[0]
+            result_filename = f"{base_name}_팩스추출결과_{timestamp}.xlsx"
+            result_path = os.path.join(os.path.dirname(self.excel_path), result_filename)
+            
+            # 엑셀 저장
+            self.df.to_excel(result_path, index=False)
+            
+            # 통계 정보
+            total_count = len(self.df)
+            fax_count = len(self.df[self.df['fax'].notna() & (self.df['fax'] != '')])
+            homepage_count = len(self.df[self.df['homepage'].notna() & (self.df['homepage'] != '')])
+            
+            self.logger.info(f"💾 결과 저장 완료: {result_path}")
+            self.logger.info(f"📊 통계:")
+            self.logger.info(f"  - 전체 기관 수: {total_count}")
+            self.logger.info(f"  - 팩스번호 보유: {fax_count} ({fax_count/total_count*100:.1f}%)")
+            self.logger.info(f"  - 홈페이지 보유: {homepage_count} ({homepage_count/total_count*100:.1f}%)")
+            self.logger.info(f"  - 처리된 기관 수: {self.processed_count}")
+            self.logger.info(f"  - 성공 추출 수: {self.success_count}")
+            self.logger.info(f"  - 중복 제거 수: {self.duplicate_count}")
+            
+            return result_path
+            
+        except Exception as e:
+            self.logger.error(f"❌ 결과 저장 오류: {e}")
+            raise
+    
+    def _send_completion_email(self, result_path: str):
+        """완료 이메일 전송"""
+        try:
+            # 실행 시간 계산
+            end_time = datetime.now()
+            duration = end_time - self.start_time
+            
+            # 통계 정보
+            total_count = len(self.df)
+            fax_count = len(self.df[self.df['fax'].notna() & (self.df['fax'] != '')])
+            homepage_count = len(self.df[self.df['homepage'].notna() & (self.df['homepage'] != '')])
+            
+            # 이메일 내용 구성
+            subject = "🎉 아동센터 팩스번호 추출 완료"
+            
+            body = f"""
+안녕하세요! 대표님! 신명호입니다. 
+
+아동센터 팩스번호 추출 작업이 성공적으로 완료되었습니다.
+
+📊 **작업 결과 요약:**
+- 전체 기관 수: {total_count:,}개
+- 팩스번호 보유: {fax_count:,}개 ({fax_count/total_count*100:.1f}%)
+- 홈페이지 보유: {homepage_count:,}개 ({homepage_count/total_count*100:.1f}%)
+- 처리된 기관 수: {self.processed_count:,}개
+- 성공 추출 수: {self.success_count:,}개
+- 중복 제거 수: {self.duplicate_count:,}개
+
+⏱️ **실행 시간:** {duration}
+
+📁 **결과 파일:** {os.path.basename(result_path)}
+
+🤖 **사용된 기능:**
+- Selenium WebDriver 검색 (브라우저 표시 모드)
+- BeautifulSoup HTML 파싱
+{"- Gemini AI 정보 추출" if self.use_ai else ""}
+- 전화번호 중복/유사성 검증
+
+작업이 완료되었습니다. 결과 파일을 확인해주세요.
+
+감사합니다!
+-신명호 드림-
+"""
+            
+            self._send_email(subject, body, result_path)
+            self.logger.info("📧 완료 이메일 전송 성공")
+            
+        except Exception as e:
+            self.logger.error(f"❌ 완료 이메일 전송 실패: {e}")
+    
+    def _send_error_email(self, error_message: str):
+        """오류 이메일 전송"""
+        try:
+            subject = "❌ 아동센터 팩스번호 추출 오류 발생"
+            
+            body = f"""
+안녕하세요!
+
+아동센터 팩스번호 추출 작업 중 오류가 발생했습니다.
+
+❌ **오류 내용:**
+{error_message}
+
+📊 **진행 상황:**
+- 처리된 기관 수: {self.processed_count:,}개
+- 성공 추출 수: {self.success_count:,}개
+- 중복 제거 수: {self.duplicate_count:,}개
+
+⏱️ **실행 시간:** {datetime.now() - self.start_time}
+
+로그 파일을 확인하여 자세한 오류 내용을 파악해주세요.
+
+CenterCrawlingBot 🤖
+"""
+            
+            self._send_email(subject, body)
+            self.logger.info("📧 오류 이메일 전송 성공")
+            
+        except Exception as e:
+            self.logger.error(f"❌ 오류 이메일 전송 실패: {e}")
+    
+    def _send_email(self, subject: str, body: str, attachment_path: str = None):
+        """이메일 전송"""
+        try:
+            # 이메일 설정 확인
+            if not self.email_config['sender_email'] or not self.email_config['sender_password']:
+                self.logger.warning("⚠️ 이메일 설정이 완료되지 않았습니다. 이메일을 전송하지 않습니다.")
+                return
+            
+            # 이메일 메시지 생성
+            msg = MIMEMultipart()
+            msg['From'] = self.email_config['sender_email']
+            msg['To'] = self.email_config['recipient_email']
+            msg['Subject'] = subject
+            
+            # 본문 추가
+            msg.attach(MIMEText(body, 'plain', 'utf-8'))
+            
+            # 첨부파일 추가
+            if attachment_path and os.path.exists(attachment_path):
+                with open(attachment_path, "rb") as attachment:
+                    part = MIMEBase('application', 'octet-stream')
+                    part.set_payload(attachment.read())
+                
+                encoders.encode_base64(part)
+                part.add_header(
+                    'Content-Disposition',
+                    f'attachment; filename= {os.path.basename(attachment_path)}'
+                )
+                msg.attach(part)
+            
+            # SMTP 서버 연결 및 전송
+            server = smtplib.SMTP(self.email_config['smtp_server'], self.email_config['smtp_port'])
+            server.starttls()
+            server.login(self.email_config['sender_email'], self.email_config['sender_password'])
+            
+            text = msg.as_string()
+            server.sendmail(self.email_config['sender_email'], self.email_config['recipient_email'], text)
+            server.quit()
+            
+            self.logger.info(f"📧 이메일 전송 완료: {self.email_config['recipient_email']}")
+            
+        except Exception as e:
+            self.logger.error(f"❌ 이메일 전송 오류: {e}")
+    
+    def _cleanup(self):
+        """정리 작업"""
+        try:
+            if self.driver:
+                self.driver.quit()
+                self.logger.info("🧹 WebDriver 정리 완료")
+        except Exception as e:
+            self.logger.error(f"❌ 정리 작업 오류: {e}")
+
+
+def main():
+    """메인 함수"""
+    try:
+        # 엑셀 파일 경로
+        excel_path = r"C:\Users\MyoengHo Shin\pjt\advanced_crawling\childcenter.xlsx"
+        
+        # 파일 존재 확인
+        if not os.path.exists(excel_path):
+            print(f"❌ 파일을 찾을 수 없습니다: {excel_path}")
+            return
+        
+        # 크롤링 봇 실행
+        bot = CenterCrawlingBot(excel_path, use_ai=True, send_email=True)
+        bot.run_extraction()
+        
+        print("🎉 팩스번호 추출 완료!")
+        
+    except Exception as e:
+        print(f"❌ 오류 발생: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+if __name__ == "__main__":
+    main()
