@@ -80,6 +80,20 @@ class ChurchCRMDatabase:
             conn.commit()
             return cursor.rowcount
     
+    def execute_insert(self, query: str, params: Tuple = None) -> Dict[str, Any]:
+        """PostgreSQL INSERT 쿼리 실행 (RETURNING 지원)"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            
+            if params:
+                cursor.execute(query, params)
+            else:
+                cursor.execute(query)
+            
+            result = cursor.fetchone()
+            conn.commit()  # 중요: 커밋 추가
+            return dict(result) if result else None
+    
     def _create_schema(self, conn):
         """PostgreSQL 스키마 생성"""
         cursor = conn.cursor()

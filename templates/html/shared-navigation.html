@@ -24,6 +24,9 @@
                     <i class="fas fa-building mr-1"></i>
                     <span class="hidden sm:inline">기관 관리</span>
                 </a>
+                
+                <!-- 팀장 이상만 접근 가능한 메뉴 -->
+                {% if user_level >= 3 %}
                 <a href="/enrichment" 
                    class="nav-item px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                    data-page="enrichment">
@@ -36,6 +39,13 @@
                     <i class="fas fa-chart-pie mr-1"></i>
                     <span class="hidden sm:inline">통계 분석</span>
                 </a>
+                <a href="/users" 
+                   class="nav-item px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                   data-page="users">
+                    <i class="fas fa-users mr-1"></i>
+                    <span class="hidden sm:inline">사용자 관리</span>
+                </a>
+                {% endif %}
             </div>
             
             <!-- 사용자 메뉴 -->
@@ -44,10 +54,21 @@
                     <i class="fas fa-bell"></i>
                 </button>
                 <div class="relative">
-                    <button class="flex items-center text-gray-600 hover:text-gray-900 p-2 rounded-md">
-                        <i class="fas fa-user-circle mr-1"></i>
-                        <span class="hidden sm:inline">관리자</span>
-                    </button>
+                    <div class="flex items-center space-x-2">
+                        <span class="text-sm text-gray-600">
+                            {% if current_user %}
+                                {{ current_user.full_name }} ({{ current_user.role }})
+                            {% else %}
+                                게스트
+                            {% endif %}
+                        </span>
+                        <form method="POST" action="/logout" class="inline">
+                            <button type="submit" class="flex items-center text-gray-600 hover:text-red-600 p-2 rounded-md">
+                                <i class="fas fa-sign-out-alt mr-1"></i>
+                                <span class="hidden sm:inline">로그아웃</span>
+                            </button>
+                        </form>
+                    </div>
                 </div>
             </div>
         </div>
@@ -74,6 +95,8 @@
                     item.classList.add('bg-purple-50', 'text-purple-600');
                 } else if (page === 'statistics') {
                     item.classList.add('bg-orange-50', 'text-orange-600');
+                } else if (page === 'users') {
+                    item.classList.add('bg-indigo-50', 'text-indigo-600');
                 }
             }
         });
