@@ -19,3 +19,13 @@ httpx
 asyncpg
 sqlalchemy
 psycopg2-binary
+
+# Hugging Face 한국어 모델 관련 패키지
+torch
+torchvision
+torchaudio
+transformers
+accelerate
+datasets
+tokenizers
+safetensors

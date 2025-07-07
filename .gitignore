@@ -55,3 +55,9 @@ Thumbs.dbsmh/
 
 smh/
 Profile.md
+HFHUB.md
+HUGGINGFACE_SETUP.md
+testhughub.py
+test_chat.py
+debug.py
+models/
