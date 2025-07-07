@@ -18,3 +18,4 @@ passlib
 httpx
 asyncpg
 sqlalchemy
+psycopg2-binary
