@@ -19,6 +19,8 @@ httpx
 asyncpg
 sqlalchemy
 psycopg2-binary
+psutil
+undetected-chromedriver
 
 # Hugging Face 한국어 모델 관련 패키지
 torch
@@ -29,3 +31,8 @@ accelerate
 datasets
 tokenizers
 safetensors
+
+# AI 에이전트 시스템 관련 패키지
+google-generativeai
+python-dotenv
+dataclasses-json
