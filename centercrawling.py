@@ -643,14 +643,20 @@ class CenterCrawlingBot:
             
             name = row['name']
             phone = row['phone']
+            address = row.get('address', '')
             if not name or pd.isna(name):
                 continue
             
             try:
                 self.logger.info(f"📞 팩스번호 검색: {name}")
                 
-                # 검색어: 기관명 + 팩스번호
-                search_query = f"{name} 팩스번호"
+                # 🎯 지역 정보를 포함한 검색 쿼리 생성
+                region_info = self._extract_region_from_address(address)
+                if region_info:
+                    search_query = f"{name} {region_info} 팩스번호"
+                else:
+                    search_query = f"{name} 팩스번호"
+                
                 fax_number = self._search_for_fax(search_query, name)
                 
                 if fax_number:
@@ -671,6 +677,42 @@ class CenterCrawlingBot:
             except Exception as e:
                 self.logger.error(f"❌ 팩스번호 검색 오류: {name} - {e}")
                 continue
+    
+    def _extract_region_from_address(self, address: str) -> str:
+        """주소에서 지역 정보 추출 (메인 클래스용)"""
+        if not address:
+            return ""
+        
+        # 지역 패턴 추출 (시/도 + 시/군/구)
+        region_patterns = [
+            r'(강원특별자치도|강원도)\s+(\S+시|\S+군)',
+            r'(서울특별시|서울시|서울)\s+(\S+구)',
+            r'(경기도|경기)\s+(\S+시|\S+군)',
+            r'(인천광역시|인천시|인천)\s+(\S+구)',
+            r'(충청남도|충남)\s+(\S+시|\S+군)',
+            r'(충청북도|충북)\s+(\S+시|\S+군)',
+            r'(전라남도|전남)\s+(\S+시|\S+군)',
+            r'(전라북도|전북)\s+(\S+시|\S+군)',
+            r'(경상남도|경남)\s+(\S+시|\S+군)',
+            r'(경상북도|경북)\s+(\S+시|\S+군)',
+            r'(부산광역시|부산시|부산)\s+(\S+구)',
+            r'(대구광역시|대구시|대구)\s+(\S+구)',
+            r'(광주광역시|광주시|광주)\s+(\S+구)',
+            r'(대전광역시|대전시|대전)\s+(\S+구)',
+            r'(울산광역시|울산시|울산)\s+(\S+구)',
+            r'(제주특별자치도|제주도|제주)\s+(\S+시)',
+            r'(세종특별자치시|세종시|세종)',
+        ]
+        
+        for pattern in region_patterns:
+            match = re.search(pattern, address)
+            if match:
+                if len(match.groups()) >= 2:
+                    return f"{match.group(1)} {match.group(2)}"
+                else:
+                    return match.group(1)
+        
+        return ""
     
     def _extract_homepage_by_search(self):
         """검색을 통한 홈페이지 추출 (중간 저장 기능 추가)"""
@@ -778,7 +820,7 @@ class CenterCrawlingBot:
     
     def _is_valid_fax_number(self, fax_number: str, phone_number: str, org_name: str) -> bool:
         """
-        팩스번호 유효성 검증
+        팩스번호 유효성 검증 (지역 일치성 검사 포함)
         
         Args:
             fax_number: 추출된 팩스번호
@@ -795,24 +837,37 @@ class CenterCrawlingBot:
             # 팩스번호 정규화
             normalized_fax = self._normalize_phone_number(fax_number)
             
-            # 전화번호가 있는 경우 비교
+            # 1. 팩스번호 형식 검증
+            if not self._is_valid_phone_format(normalized_fax):
+                self.logger.info(f"🚫 잘못된 팩스번호 형식: {org_name} - {normalized_fax}")
+                return False
+            
+            # 2. 전화번호가 있는 경우 비교
             if phone_number and not pd.isna(phone_number):
                 normalized_phone = self._normalize_phone_number(str(phone_number))
                 
-                # 1. 완전히 동일한 경우 제외
+                # 2-1. 완전히 동일한 경우 제외
                 if normalized_fax == normalized_phone:
                     self.logger.info(f"🚫 팩스번호와 전화번호 동일: {org_name} - {normalized_fax}")
                     return False
                 
-                # 2. 유사성 검사 (지번 차이 등 고려)
+                # 2-2. 지역번호 일치성 검사 (NEW!)
+                if not self._is_same_area_code(normalized_fax, normalized_phone):
+                    self.logger.info(f"🚫 팩스번호와 전화번호 지역번호 불일치: {org_name} - FAX:{normalized_fax} vs TEL:{normalized_phone}")
+                    return False
+                
+                # 2-3. 유사성 검사 (더 엄격하게)
                 if self._are_numbers_too_similar(normalized_fax, normalized_phone):
                     self.logger.info(f"🚫 팩스번호와 전화번호 유사: {org_name} - FAX:{normalized_fax} vs TEL:{normalized_phone}")
                     return False
             
-            # 3. 팩스번호 형식 검증
-            if not self._is_valid_phone_format(normalized_fax):
-                self.logger.info(f"🚫 잘못된 팩스번호 형식: {org_name} - {normalized_fax}")
-                return False
+            # 3. 기관 주소와 팩스번호 지역 일치성 검사 (NEW!)
+            if hasattr(self, 'df') and org_name:
+                org_row = self.df[self.df['name'] == org_name]
+                if not org_row.empty:
+                    org_address = org_row.iloc[0].get('address', '')
+                    if not self._is_fax_area_match_address(normalized_fax, org_address, org_name):
+                        return False
             
             return True
             
@@ -820,9 +875,122 @@ class CenterCrawlingBot:
             self.logger.error(f"❌ 팩스번호 유효성 검증 오류: {org_name} - {e}")
             return False
     
+    def _is_same_area_code(self, fax: str, phone: str) -> bool:
+        """
+        팩스번호와 전화번호의 지역번호가 같은지 확인
+        
+        Args:
+            fax: 팩스번호
+            phone: 전화번호
+            
+        Returns:
+            bool: 같은 지역번호인지 여부
+        """
+        try:
+            fax_digits = re.sub(r'[^\d]', '', fax)
+            phone_digits = re.sub(r'[^\d]', '', phone)
+            
+            # 지역번호 추출
+            fax_area = self._extract_area_code(fax_digits)
+            phone_area = self._extract_area_code(phone_digits)
+            
+            return fax_area == phone_area
+            
+        except Exception as e:
+            self.logger.error(f"❌ 지역번호 비교 오류: {e}")
+            return False
+    
+    def _extract_area_code(self, phone_digits: str) -> str:
+        """
+        전화번호에서 지역번호 추출
+        
+        Args:
+            phone_digits: 숫자만 있는 전화번호
+            
+        Returns:
+            str: 지역번호
+        """
+        if len(phone_digits) >= 10:
+            # 10자리 이상인 경우 (02-XXXX-XXXX, 031-XXX-XXXX 등)
+            if phone_digits.startswith('02'):
+                return '02'
+            else:
+                return phone_digits[:3]
+        elif len(phone_digits) >= 9:
+            # 9자리인 경우
+            if phone_digits.startswith('02'):
+                return '02'
+            else:
+                return phone_digits[:3]
+        else:
+            # 8자리인 경우
+            return phone_digits[:2]
+    
+    def _is_fax_area_match_address(self, fax_number: str, address: str, org_name: str) -> bool:
+        """
+        팩스번호 지역번호와 기관 주소가 일치하는지 확인
+        
+        Args:
+            fax_number: 팩스번호
+            address: 기관 주소
+            org_name: 기관명
+            
+        Returns:
+            bool: 지역이 일치하는지 여부
+        """
+        try:
+            if not address or pd.isna(address):
+                return True  # 주소가 없으면 검증 스킵
+            
+            fax_digits = re.sub(r'[^\d]', '', fax_number)
+            area_code = self._extract_area_code(fax_digits)
+            
+            # 지역번호별 지역 매핑
+            area_mapping = {
+                '02': ['서울', '서울특별시', '서울시'],
+                '031': ['경기', '경기도', '인천', '인천광역시'],
+                '032': ['인천', '인천광역시', '경기'],
+                '033': ['강원', '강원도', '강원특별자치도'],
+                '041': ['충남', '충청남도', '세종', '세종특별자치시'],
+                '042': ['대전', '대전광역시', '충남', '충청남도'],
+                '043': ['충북', '충청북도'],
+                '044': ['세종', '세종특별자치시', '충남'],
+                '051': ['부산', '부산광역시'],
+                '052': ['울산', '울산광역시'],
+                '053': ['대구', '대구광역시'],
+                '054': ['경북', '경상북도', '대구'],
+                '055': ['경남', '경상남도', '부산'],
+                '061': ['전남', '전라남도', '광주'],
+                '062': ['광주', '광주광역시', '전남'],
+                '063': ['전북', '전라북도'],
+                '064': ['제주', '제주도', '제주특별자치도'],
+                '070': ['인터넷전화'],  # 인터넷전화는 지역 제한 없음
+            }
+            
+            # 인터넷전화(070)는 지역 제한 없음
+            if area_code == '070':
+                return True
+            
+            expected_regions = area_mapping.get(area_code, [])
+            if not expected_regions:
+                self.logger.warning(f"⚠️ 알 수 없는 지역번호: {area_code} - {org_name}")
+                return True  # 알 수 없는 지역번호는 통과
+            
+            # 주소에서 지역명 확인
+            for region in expected_regions:
+                if region in address:
+                    return True
+            
+            self.logger.info(f"🚫 지역 불일치: {org_name} - 팩스:{area_code}({expected_regions}) vs 주소:{address}")
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"❌ 지역 일치성 검사 오류: {org_name} - {e}")
+            return True  # 오류 시 통과
+    
     def _are_numbers_too_similar(self, fax: str, phone: str) -> bool:
         """
-        두 번호가 너무 유사한지 검사
+        두 번호가 너무 유사한지 검사 (더 엄격하게)
         
         Args:
             fax: 팩스번호
@@ -844,22 +1012,24 @@ class CenterCrawlingBot:
             if len(fax_digits) < 8:  # 너무 짧으면 비교하지 않음
                 return False
             
-            # 앞자리 (지역번호) 비교
-            fax_area = fax_digits[:3] if len(fax_digits) >= 10 else fax_digits[:2]
-            phone_area = phone_digits[:3] if len(phone_digits) >= 10 else phone_digits[:2]
+            # 지역번호 추출
+            fax_area = self._extract_area_code(fax_digits)
+            phone_area = self._extract_area_code(phone_digits)
             
-            # 지역번호가 같고
-            if fax_area == phone_area:
-                # 뒷자리에서 1-2자리만 다른 경우 (지번 차이 등)
-                fax_suffix = fax_digits[len(fax_area):]
-                phone_suffix = phone_digits[len(phone_area):]
-                
-                # 뒷자리 차이 계산
-                diff_count = sum(1 for i, (f, p) in enumerate(zip(fax_suffix, phone_suffix)) if f != p)
-                
-                # 2자리 이하 차이면 유사한 것으로 판단
-                if diff_count <= 2:
-                    return True
+            # 지역번호가 다르면 유사하지 않음
+            if fax_area != phone_area:
+                return False
+            
+            # 지역번호가 같은 경우 뒷자리 비교
+            fax_suffix = fax_digits[len(fax_area):]
+            phone_suffix = phone_digits[len(phone_area):]
+            
+            # 뒷자리 차이 계산
+            diff_count = sum(1 for i, (f, p) in enumerate(zip(fax_suffix, phone_suffix)) if f != p)
+            
+            # 1자리 이하 차이면 유사한 것으로 판단 (더 엄격하게)
+            if diff_count <= 1:
+                return True
             
             return False
             
@@ -1145,7 +1315,8 @@ class CenterCrawlingBot:
     def _is_valid_homepage_url(self, url: str, org_name: str) -> bool:
         """유효한 홈페이지 URL인지 확인"""
         try:
-            # 구글, 네이버 등 검색 사이트 제외
+            from urllib.parse import urlparse
+            
             excluded_domains = [
                 'google.com', 'naver.com', 'daum.net', 'youtube.com',
                 'facebook.com', 'instagram.com', 'blog.naver.com'
@@ -1475,6 +1646,7 @@ def process_fax_extraction_chunk(chunk_df: pd.DataFrame, worker_id: int, fax_pat
         for idx, row in chunk_df.iterrows():
             name = row['name']
             phone = row['phone']
+            address = row.get('address', '')  # 주소 정보 추가
             
             if not name or pd.isna(name):
                 continue
@@ -1482,12 +1654,17 @@ def process_fax_extraction_chunk(chunk_df: pd.DataFrame, worker_id: int, fax_pat
             try:
                 print(f"📞 워커 {worker_id}: 팩스번호 검색 - {name}")
                 
-                # 구글 검색
-                search_query = f"{name} 팩스번호"
+                # 🎯 지역 정보를 포함한 검색 쿼리 생성
+                region_info = extract_region_from_address(address)
+                if region_info:
+                    search_query = f"{name} {region_info} 팩스번호"
+                else:
+                    search_query = f"{name} 팩스번호"
+                
                 fax_number = search_google_for_info(driver, search_query, fax_patterns, 'fax')
                 
-                # 유효성 검사
-                if fax_number and is_valid_fax_number_simple(fax_number, phone):
+                # 유효성 검사 (주소 정보 포함)
+                if fax_number and is_valid_fax_number_simple(fax_number, phone, address, name):
                     results.append({
                         'index': idx,
                         'name': name,
@@ -1500,7 +1677,10 @@ def process_fax_extraction_chunk(chunk_df: pd.DataFrame, worker_id: int, fax_pat
                         'name': name,
                         'fax': ''
                     })
-                    print(f"❌ 워커 {worker_id}: 팩스번호 없음 - {name}")
+                    if fax_number:
+                        print(f"🚫 워커 {worker_id}: 팩스번호 유효성 검사 실패 - {name} -> {fax_number}")
+                    else:
+                        print(f"❌ 워커 {worker_id}: 팩스번호 없음 - {name}")
                 
                 # 랜덤 지연 (1-3초)
                 time.sleep(random.uniform(1, 3))
@@ -1698,40 +1878,176 @@ def is_valid_phone_format(phone: str) -> bool:
             return True
     return False
 
-def is_valid_fax_number_simple(fax_number: str, phone_number: str) -> bool:
-    """간단한 팩스번호 유효성 검사"""
+def is_valid_fax_number_simple(fax_number: str, phone_number: str, org_address: str = None, org_name: str = None) -> bool:
+    """간단한 팩스번호 유효성 검사 (지역 일치성 포함)"""
     import pandas as pd
+    import re
+    
     if not fax_number or pd.isna(fax_number):
         return False
     
     normalized_fax = normalize_phone_number(fax_number)
     
+    # 1. 형식 검증
+    if not is_valid_phone_format(normalized_fax):
+        return False
+    
+    # 2. 전화번호와 비교
     if phone_number and not pd.isna(phone_number):
         normalized_phone = normalize_phone_number(str(phone_number))
+        
+        # 2-1. 완전히 동일한 경우 제외
         if normalized_fax == normalized_phone:
             return False
+        
+        # 2-2. 지역번호 일치성 검사
+        if not is_same_area_code_simple(normalized_fax, normalized_phone):
+            return False
+        
+        # 2-3. 유사성 검사 (엄격하게)
+        if are_numbers_too_similar_simple(normalized_fax, normalized_phone):
+            return False
     
-    return is_valid_phone_format(normalized_fax)
-
-def is_valid_homepage_url(url: str, org_name: str) -> bool:
-    """유효한 홈페이지 URL인지 확인"""
-    try:
-        excluded_domains = [
-            'google.com', 'naver.com', 'daum.net', 'youtube.com',
-            'facebook.com', 'instagram.com', 'blog.naver.com'
-        ]
-        
-        parsed_url = urlparse(url)
-        domain = parsed_url.netloc.lower()
-        
-        for excluded in excluded_domains:
-            if excluded in domain:
-                return False
-        
-        return True
-        
-    except Exception:
+    # 3. 주소와 지역 일치성 검사
+    if org_address and not is_fax_area_match_address_simple(normalized_fax, org_address, org_name):
         return False
+    
+    return True
+
+def is_same_area_code_simple(fax: str, phone: str) -> bool:
+    """간단한 지역번호 일치성 검사"""
+    try:
+        fax_digits = re.sub(r'[^\d]', '', fax)
+        phone_digits = re.sub(r'[^\d]', '', phone)
+        
+        fax_area = extract_area_code_simple(fax_digits)
+        phone_area = extract_area_code_simple(phone_digits)
+        
+        return fax_area == phone_area
+    except:
+        return False
+
+def extract_area_code_simple(phone_digits: str) -> str:
+    """간단한 지역번호 추출"""
+    if len(phone_digits) >= 10:
+        if phone_digits.startswith('02'):
+            return '02'
+        else:
+            return phone_digits[:3]
+    elif len(phone_digits) >= 9:
+        if phone_digits.startswith('02'):
+            return '02'
+        else:
+            return phone_digits[:3]
+    else:
+        return phone_digits[:2]
+
+def are_numbers_too_similar_simple(fax: str, phone: str) -> bool:
+    """간단한 번호 유사성 검사"""
+    try:
+        fax_digits = re.sub(r'[^\d]', '', fax)
+        phone_digits = re.sub(r'[^\d]', '', phone)
+        
+        if len(fax_digits) != len(phone_digits) or len(fax_digits) < 8:
+            return False
+        
+        fax_area = extract_area_code_simple(fax_digits)
+        phone_area = extract_area_code_simple(phone_digits)
+        
+        if fax_area != phone_area:
+            return False
+        
+        fax_suffix = fax_digits[len(fax_area):]
+        phone_suffix = phone_digits[len(phone_area):]
+        
+        diff_count = sum(1 for i, (f, p) in enumerate(zip(fax_suffix, phone_suffix)) if f != p)
+        
+        return diff_count <= 1  # 1자리 이하 차이면 유사
+    except:
+        return False
+
+def is_fax_area_match_address_simple(fax_number: str, address: str, org_name: str = None) -> bool:
+    """간단한 지역 일치성 검사"""
+    try:
+        if not address or pd.isna(address):
+            return True
+        
+        fax_digits = re.sub(r'[^\d]', '', fax_number)
+        area_code = extract_area_code_simple(fax_digits)
+        
+        area_mapping = {
+            '02': ['서울', '서울특별시', '서울시'],
+            '031': ['경기', '경기도', '인천', '인천광역시'],
+            '032': ['인천', '인천광역시', '경기'],
+            '033': ['강원', '강원도', '강원특별자치도'],
+            '041': ['충남', '충청남도', '세종', '세종특별자치시'],
+            '042': ['대전', '대전광역시', '충남', '충청남도'],
+            '043': ['충북', '충청북도'],
+            '044': ['세종', '세종특별자치시', '충남'],
+            '051': ['부산', '부산광역시'],
+            '052': ['울산', '울산광역시'],
+            '053': ['대구', '대구광역시'],
+            '054': ['경북', '경상북도', '대구'],
+            '055': ['경남', '경상남도', '부산'],
+            '061': ['전남', '전라남도', '광주'],
+            '062': ['광주', '광주광역시', '전남'],
+            '063': ['전북', '전라북도'],
+            '064': ['제주', '제주도', '제주특별자치도'],
+            '070': ['인터넷전화'],
+        }
+        
+        if area_code == '070':  # 인터넷전화는 지역 제한 없음
+            return True
+        
+        expected_regions = area_mapping.get(area_code, [])
+        if not expected_regions:
+            return True  # 알 수 없는 지역번호는 통과
+        
+        for region in expected_regions:
+            if region in address:
+                return True
+        
+        print(f"🚫 지역 불일치: {org_name} - 팩스:{area_code}({expected_regions}) vs 주소:{address}")
+        return False
+        
+    except:
+        return True  # 오류 시 통과
+
+def extract_region_from_address(address: str) -> str:
+    """주소에서 지역 정보 추출"""
+    if not address:
+        return ""
+    
+    # 지역 패턴 추출 (시/도 + 시/군/구)
+    region_patterns = [
+        r'(강원특별자치도|강원도)\s+(\S+시|\S+군)',
+        r'(서울특별시|서울시|서울)\s+(\S+구)',
+        r'(경기도|경기)\s+(\S+시|\S+군)',
+        r'(인천광역시|인천시|인천)\s+(\S+구)',
+        r'(충청남도|충남)\s+(\S+시|\S+군)',
+        r'(충청북도|충북)\s+(\S+시|\S+군)',
+        r'(전라남도|전남)\s+(\S+시|\S+군)',
+        r'(전라북도|전북)\s+(\S+시|\S+군)',
+        r'(경상남도|경남)\s+(\S+시|\S+군)',
+        r'(경상북도|경북)\s+(\S+시|\S+군)',
+        r'(부산광역시|부산시|부산)\s+(\S+구)',
+        r'(대구광역시|대구시|대구)\s+(\S+구)',
+        r'(광주광역시|광주시|광주)\s+(\S+구)',
+        r'(대전광역시|대전시|대전)\s+(\S+구)',
+        r'(울산광역시|울산시|울산)\s+(\S+구)',
+        r'(제주특별자치도|제주도|제주)\s+(\S+시)',
+        r'(세종특별자치시|세종시|세종)',
+    ]
+    
+    for pattern in region_patterns:
+        match = re.search(pattern, address)
+        if match:
+            if len(match.groups()) >= 2:
+                return f"{match.group(1)} {match.group(2)}"
+            else:
+                return match.group(1)
+    
+    return ""
 
 def main():
     """메인 함수"""

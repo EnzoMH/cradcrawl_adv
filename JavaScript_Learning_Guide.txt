@@ -1,0 +1,439 @@
+# 📚 JavaScript 학습 로드맵 & 성능 최적화 가이드
+
+---
+
+## 🎯 프로그래머스 추천 학습 경로
+
+### 1️⃣ 기초 단계 (1-2개월)
+
+**📖 프로그래머스 JavaScript 입문**
+
+**학습 내용:**
+• 변수와 데이터 타입
+• 함수와 스코프
+• 조건문과 반복문
+• 배열과 객체
+
+**💡 추천 문제 유형:**
+
+```javascript
+// 1. 기본 문법 연습
+function solution(arr) {
+    return arr.filter(x => x > 0);
+}
+
+// 2. 배열 조작
+function solution(numbers) {
+    return numbers.map(x => x * 2);
+}
+```
+
+---
+
+### 2️⃣ 중급 단계 (2-3개월)
+
+**📖 프로그래머스 JavaScript 중급**
+
+**학습 내용:**
+• ES6+ 문법 (화살표 함수, 구조분해할당)
+• 비동기 처리 (Promise, async/await)
+• DOM 조작
+• 이벤트 처리
+
+**💡 추천 문제 유형:**
+
+```javascript
+// 1. 고차함수 활용
+function solution(arr) {
+    return arr.reduce((acc, cur) => acc + cur, 0);
+}
+
+// 2. 객체 조작
+function solution(data) {
+    return data.map(({name, age}) => ({name, age: age + 1}));
+}
+```
+
+---
+
+### 3️⃣ 고급 단계 (3-4개월)
+
+**📖 프로그래머스 JavaScript 고급**
+
+**학습 내용:**
+• 클로저와 스코프
+• 프로토타입과 클래스
+• 모듈 시스템
+• 에러 처리
+
+**💡 추천 문제 유형:**
+
+```javascript
+// 1. 클로저 활용
+function createCounter() {
+    let count = 0;
+    return function() {
+        return ++count;
+    };
+}
+
+// 2. 클래스 구현
+class Calculator {
+    constructor() {
+        this.result = 0;
+    }
+    
+    add(num) {
+        this.result += num;
+        return this;
+    }
+}
+```
+
+---
+
+## 🚀 React 학습 경로
+
+### 1️⃣ React 기초 (1개월)
+
+**📖 프로그래머스 React 입문**
+
+**학습 내용:**
+• 컴포넌트와 JSX
+• Props와 State
+• 이벤트 처리
+• 조건부 렌더링
+
+**🛠️ 실습 프로젝트:**
+
+```javascript
+// 간단한 Todo 앱
+function TodoApp() {
+    const [todos, setTodos] = useState([]);
+    const [input, setInput] = useState('');
+
+    const addTodo = () => {
+        setTodos([...todos, { id: Date.now(), text: input }]);
+        setInput('');
+    };
+
+    return (
+        <div>
+            <input value={input} onChange={(e) => setInput(e.target.value)} />
+            <button onClick={addTodo}>추가</button>
+            <ul>
+                {todos.map(todo => (
+                    <li key={todo.id}>{todo.text}</li>
+                ))}
+            </ul>
+        </div>
+    );
+}
+```
+
+---
+
+### 2️⃣ React 중급 (1-2개월)
+
+**📖 훅(Hooks) 마스터하기**
+
+**학습 내용:**
+• useState, useEffect
+• useContext, useReducer
+• 커스텀 훅 만들기
+
+**🛠️ 실습 프로젝트:**
+
+```javascript
+// 커스텀 훅 예시
+function useAPI(url) {
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                setData(data);
+                setLoading(false);
+            });
+    }, [url]);
+
+    return { data, loading };
+}
+```
+
+---
+
+## 📖 추천 학습 자료
+
+### 🆓 무료 온라인 자료
+
+**🔗 MDN JavaScript 가이드**
+→ 가장 정확한 레퍼런스
+
+**🔗 freeCodeCamp**
+→ 체계적인 커리큘럼
+
+**🔗 JavaScript.info**
+→ 상세한 설명과 예제
+
+---
+
+### 💰 유료 강의 (선택사항)
+
+**🔗 인프런 JavaScript 완주반**
+
+**🔗 유데미 React 완성 과정**
+
+**🔗 노마드코더 실전 프로젝트**
+
+---
+
+### 🏋️ 실습 플랫폼
+
+**🔗 프로그래머스**
+→ 한국어 문제, 단계별 학습
+
+**🔗 코드카타**
+→ 반복 연습
+
+**🔗 LeetCode**
+→ 알고리즘 문제 (영어)
+
+---
+
+## 🗓️ 학습 일정 권장안
+
+### 📅 1-2개월차: JavaScript 기초
+
+**⏰ 주 1-2회, 각 2시간씩 학습**
+
+**월/수/금:** 프로그래머스 문제 풀기
+**화/목:** 이론 학습 및 개념 정리
+**주말:** 미니 프로젝트 만들기
+
+---
+
+### 📅 3-4개월차: React 기초
+
+**⏰ 주 3회, 각 2시간씩 학습**
+
+**월/수/금:** React 컴포넌트 만들기
+**화/목:** 훅 연습 및 상태 관리
+**주말:** 간단한 앱 만들기
+
+---
+
+### 📅 5-6개월차: 실전 프로젝트
+
+**⏰ 주 4-5회, 각 2-3시간씩 학습**
+
+**평일:** 프로젝트 개발
+**주말:** 코드 리뷰 및 리팩토링
+
+---
+
+## ⚡ 성능 최적화 전략
+
+### 🚀 번들 크기 최적화
+
+#### 1️⃣ 코드 분할 (Code Splitting)
+
+```javascript
+// 라우트 기반 분할
+const Organizations = lazy(() => import('./Organizations'));
+const Statistics = lazy(() => import('./Statistics'));
+
+function App() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <Routes>
+        <Route path="/orgs" element={<Organizations />} />
+        <Route path="/stats" element={<Statistics />} />
+      </Routes>
+    </Suspense>
+  );
+}
+```
+
+---
+
+#### 2️⃣ 동적 임포트
+
+```javascript
+// 필요할 때만 로드
+const loadChart = async () => {
+  const { Chart } = await import('./Chart');
+  return Chart;
+};
+```
+
+---
+
+#### 3️⃣ 트리 쉐이킹
+
+```javascript
+// 필요한 부분만 임포트
+import { debounce } from 'lodash/debounce';  // ✅ 좋음
+import _ from 'lodash';  // ❌ 전체 라이브러리 로드
+```
+
+---
+
+### 📊 렌더링 최적화
+
+#### 1️⃣ React.memo 활용
+
+```javascript
+const ExpensiveComponent = React.memo(({ data }) => {
+  return <div>{data.map(item => <Item key={item.id} {...item} />)}</div>;
+});
+```
+
+---
+
+#### 2️⃣ useMemo와 useCallback
+
+```javascript
+function DataTable({ data, filter }) {
+  const filteredData = useMemo(() => {
+    return data.filter(item => item.category === filter);
+  }, [data, filter]);
+
+  const handleSort = useCallback((column) => {
+    // 정렬 로직
+  }, []);
+
+  return <Table data={filteredData} onSort={handleSort} />;
+}
+```
+
+---
+
+#### 3️⃣ 가상화 (Virtualization)
+
+```javascript
+import { FixedSizeList as List } from 'react-window';
+
+function VirtualList({ items }) {
+  const Row = ({ index, style }) => (
+    <div style={style}>
+      {items[index].name}
+    </div>
+  );
+
+  return (
+    <List
+      height={400}
+      itemCount={items.length}
+      itemSize={35}
+    >
+      {Row}
+    </List>
+  );
+}
+```
+
+---
+
+### 🔄 상태 관리 최적화
+
+#### 1️⃣ 상태 분리
+
+```javascript
+// 전역 상태와 로컬 상태 분리
+const useGlobalStore = create((set) => ({
+  user: null,
+  setUser: (user) => set({ user }),
+}));
+
+function Component() {
+  const user = useGlobalStore(state => state.user);  // 전역
+  const [localData, setLocalData] = useState([]);    // 로컬
+}
+```
+
+---
+
+#### 2️⃣ 선택적 구독
+
+```javascript
+// 필요한 상태만 구독
+const userName = useGlobalStore(state => state.user?.name);
+const userPermissions = useGlobalStore(state => state.user?.permissions);
+```
+
+---
+
+## 🛠️ 문제 해결 가이드
+
+### ❗ 자주 발생하는 문제들
+
+#### 1️⃣ 빌드 오류
+
+**❌ 문제:** "Module not found" 또는 "Cannot resolve dependency"
+
+**✅ 해결:**
+• package.json 의존성 버전 확인
+• node_modules 삭제 후 재설치
+• npm cache clean --force
+
+---
+
+#### 2️⃣ 성능 문제
+
+**❌ 문제:** 컴포넌트 리렌더링 과다
+
+**✅ 해결:**
+• React DevTools Profiler 사용
+• unnecessary re-renders 식별
+• memo, useMemo, useCallback 적용
+
+---
+
+#### 3️⃣ 상태 관리 문제
+
+**❌ 문제:** 상태 업데이트가 반영되지 않음
+
+**✅ 해결:**
+• 불변성 원칙 확인
+• 상태 업데이트 함수 올바른 사용
+• useEffect 의존성 배열 검토
+
+---
+
+### 🔧 디버깅 도구
+
+#### 1️⃣ React DevTools
+• 컴포넌트 계층 구조 확인
+• Props와 State 실시간 모니터링
+• 성능 프로파일링
+
+#### 2️⃣ Redux DevTools (상태 관리 시)
+• 액션 히스토리 추적
+• 상태 변화 시각화
+• 시간 여행 디버깅
+
+#### 3️⃣ Network 탭
+• API 호출 모니터링
+• 번들 크기 분석
+• 로딩 시간 측정
+
+---
+
+## 📞 지원 및 문의
+
+**📧 개발팀:** isfs003@gmail.com
+**🛠️ 기술 지원:** 개발 중 막히는 부분 언제든 문의
+
+**📚 추가 자료:**
+• React 공식 문서: https://react.dev/
+• Vite 가이드: https://vitejs.dev/guide/
+• Tailwind CSS 문서: https://tailwindcss.com/docs
+• Zustand 가이드: https://github.com/pmndrs/zustand
+
+---
+
+*📅 마지막 업데이트: 2025년 1월 28일*
+*📝 버전: 1.0.0* 
