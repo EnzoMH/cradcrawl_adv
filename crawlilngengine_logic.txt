@@ -30,7 +30,7 @@
    -> 유효성 검사 로직 추가
 3. 간단한 정보 ChromaDB 에 Vetorizing 하여 집어넣기
 4. Component 기반 프론트엔드 작업 고도화 -> front development ... .md 파일 참고
-5. DB 스키마 migration 진행, DB접근권한등 -> 우선 GUI 방식으로 현재 psql 구조 확인, 프론트상으로 이 부분 구현 가능한지 체크
+5. DB 스키마 Extension 진행, DB접근권한등 -> 우선 GUI 방식으로 현재 psql 구조 확인, 프론트상으로 이 부분 구현 가능한지 체크
 6. Contact info -> normal Staff
   -> 영업 DB 기준 Contact History 상세확인 
     -> 통화 완료 10% -> Keyman 정보 추출 / 통화 실패 -> 
