@@ -1,6 +1,6 @@
-﻿# 🏢 Advanced Church CRM System
+﻿# 🏢 Advanced ROK Organization Management AI CRM System
 
-한국 교회/기관 정보를 관리하는 통합 CRM 시스템 (React + FastAPI + PostgreSQL + AI 크롤링)
+한국 교회/학원/아동센터/복지기관 정보를 관리하는 통합 CRM 시스템 (React + FastAPI + PostgreSQL + AI 크롤링)
 
 ## 📋 목차
 
@@ -18,7 +18,7 @@
 
 ## 🎯 개요
 
-**Advanced Church CRM System**은 한국의 교회 및 종교기관 정보를 체계적으로 관리하는 통합 CRM 솔루션입니다.
+**Advanced Church CRM System**은 한국의 다양한 기관 정보를 체계적으로 관리하는 통합 CRM 솔루션입니다.
 
 ### ✨ 핵심 특징
 
